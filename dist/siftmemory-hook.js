@@ -40,11 +40,13 @@ export function buildIngestEventRequest(params) {
     const file_path = sanitized.file_path;
     // Build payload_json from sanitizer-specific fields only
     const payload_json = {};
+    // Only true top-level IngestEventRequest fields should be excluded from payload_json.
+    // Hash fields (old_string_hash, new_string_hash, command_hash, output_hash, pattern_hash),
+    // content_hash, match_count, etc. all belong INSIDE payload_json.
     const topLevelExcludes = [
         'workspace_id', 'session_id', 'client_event_id', 'timestamp',
-        'event_type', 'actor', 'tool', 'file_path', 'symbol_refs',
-        'privacy_level', 'old_string_hash', 'new_string_hash',
-        'command', 'output_hash', 'pattern_hash',
+        'event_type', 'actor', 'tool', 'tool_name', 'file_path',
+        'symbol_refs', 'privacy_level', 'tool_use_id',
     ];
     for (const [key, value] of Object.entries(sanitized)) {
         if (!topLevelExcludes.includes(key)) {

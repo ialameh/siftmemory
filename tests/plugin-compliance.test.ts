@@ -197,6 +197,128 @@ describe('Payload Sanitizer', () => {
   });
 });
 
+describe('Event Contract - buildIngestEventRequest', () => {
+  it('Edit event payload_json contains old_string_hash and new_string_hash', async () => {
+    const { buildIngestEventRequest } = await import('../scripts/siftmemory-hook.js');
+    const { sanitizeToolPayload } = await import('../scripts/payload-sanitizer.js');
+
+    const sanitized = sanitizeToolPayload(
+      {
+        tool_name: 'Edit',
+        tool_input: { file_path: 'src/main.rs', old_string: 'foo', new_string: 'bar' },
+        hook_event_name: 'post-tool-use',
+      },
+      'FileEdit'
+    );
+
+    const request = buildIngestEventRequest({
+      sanitized,
+      workspaceId: 'ws123',
+      sessionId: 'sess456',
+      hookName: 'post-tool-use',
+      eventType: 'FileEdit',
+    });
+
+    // Hash fields must be INSIDE payload_json, not removed
+    expect(request.payload_json).toHaveProperty('old_string_hash');
+    expect(request.payload_json).toHaveProperty('new_string_hash');
+    expect(request.payload_json).toHaveProperty('old_string_length');
+    expect(request.payload_json).toHaveProperty('new_string_length');
+
+    // Must NOT contain raw strings at any level
+    expect(request).not.toHaveProperty('old_string');
+    expect(request).not.toHaveProperty('new_string');
+    expect((request as any).payload_json).not.toHaveProperty('old_string');
+    expect((request as any).payload_json).not.toHaveProperty('new_string');
+  });
+
+  it('Bash event payload_json contains command_hash and output_hash', async () => {
+    const { buildIngestEventRequest } = await import('../scripts/siftmemory-hook.js');
+    const { sanitizeToolPayload } = await import('../scripts/payload-sanitizer.js');
+
+    const sanitized = sanitizeToolPayload(
+      {
+        tool_name: 'Bash',
+        tool_input: { command: 'npm test', exit_code: 0 },
+        tool_output: { stdout: 'tests passed' },
+        hook_event_name: 'post-tool-use',
+      },
+      'CommandRun'
+    );
+
+    const request = buildIngestEventRequest({
+      sanitized,
+      workspaceId: 'ws123',
+      sessionId: 'sess456',
+      hookName: 'post-tool-use',
+      eventType: 'CommandRun',
+    });
+
+    expect(request.payload_json).toHaveProperty('command_hash');
+    expect(request.payload_json).toHaveProperty('output_hash');
+    expect(request.payload_json).toHaveProperty('command');
+    expect(request.payload_json).toHaveProperty('exit_code');
+
+    // Must NOT contain raw output at any level
+    expect(request).not.toHaveProperty('output');
+    expect((request as any).payload_json).not.toHaveProperty('output');
+  });
+
+  it('Grep/Glob payload_json contains pattern_hash', async () => {
+    const { buildIngestEventRequest } = await import('../scripts/siftmemory-hook.js');
+    const { sanitizeToolPayload } = await import('../scripts/payload-sanitizer.js');
+
+    const sanitized = sanitizeToolPayload(
+      {
+        tool_name: 'Grep',
+        tool_input: { pattern: 'TODO.*fixme', matches: [{ file_path: 'src/main.rs' }] },
+        hook_event_name: 'post-tool-use',
+      },
+      'ManualNote'
+    );
+
+    const request = buildIngestEventRequest({
+      sanitized,
+      workspaceId: 'ws123',
+      sessionId: 'sess456',
+      hookName: 'post-tool-use',
+      eventType: 'ManualNote',
+    });
+
+    expect(request.payload_json).toHaveProperty('pattern_hash');
+    expect(request.payload_json).toHaveProperty('match_count');
+  });
+
+  it('Write event payload_json contains content_hash, not raw content', async () => {
+    const { buildIngestEventRequest } = await import('../scripts/siftmemory-hook.js');
+    const { sanitizeToolPayload } = await import('../scripts/payload-sanitizer.js');
+
+    const sanitized = sanitizeToolPayload(
+      {
+        tool_name: 'Write',
+        tool_input: { file_path: 'src/main.rs', content: 'secret api key\nanother secret' },
+        hook_event_name: 'post-tool-use',
+      },
+      'FileCreate'
+    );
+
+    const request = buildIngestEventRequest({
+      sanitized,
+      workspaceId: 'ws123',
+      sessionId: 'sess456',
+      hookName: 'post-tool-use',
+      eventType: 'FileCreate',
+    });
+
+    expect(request.payload_json).toHaveProperty('content_hash');
+    expect(request.payload_json).toHaveProperty('byte_length');
+
+    // Must NOT contain raw content
+    expect(request).not.toHaveProperty('content');
+    expect((request as any).payload_json).not.toHaveProperty('content');
+  });
+});
+
 describe('Event Buffer', () => {
   it('flushes events grouped by workspace_id', async () => {
     // Verify the event buffer implementation groups by workspace
