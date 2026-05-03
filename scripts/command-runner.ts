@@ -16,6 +16,9 @@ import { binaryResolver } from './runtime/binary-resolver.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const COMMANDS_DIR = join(__dirname, '..', 'commands');
 
+const noWorkspaceDiagnostic = (cwd: string): string =>
+  `No workspace found. Tried SIFTMEMORY_WORKSPACE_ID and /v1/workspaces/init for cwd: ${cwd}`;
+
 export type CommandName =
   | 'check'
   | 'status'
@@ -32,6 +35,16 @@ export interface CommandResult {
   success: boolean;
   output: string;
   error?: string;
+}
+
+async function resolveWorkspaceId(cwd: string): Promise<string | null> {
+  const workspaceId = process.env.SIFTMEMORY_WORKSPACE_ID?.trim();
+  if (workspaceId) {
+    return workspaceId;
+  }
+
+  const workspace = await ensureWorkspace(cwd);
+  return workspace?.workspace_id ?? null;
 }
 
 export async function runCommand(name: CommandName, args: string[]): Promise<CommandResult> {
@@ -167,15 +180,16 @@ async function runResume(args: string[]): Promise<CommandResult> {
   }
 
   const task = args.join(' ').trim() || 'Resume reasoning';
-  const workspace = await ensureWorkspace(process.cwd());
+  const cwd = process.cwd();
+  const workspaceId = await resolveWorkspaceId(cwd);
 
-  if (!workspace) {
-    return { success: false, output: '', error: 'No workspace found.' };
+  if (!workspaceId) {
+    return { success: false, output: '', error: noWorkspaceDiagnostic(cwd) };
   }
 
   try {
     const result = await buildResumePack({
-      workspaceId: workspace.workspace_id,
+      workspaceId,
       sessionId: process.env.SIFTMEMORY_SESSION_ID || 'unknown',
       task,
       mode: 'standard',
@@ -243,12 +257,11 @@ async function runDoctor(): Promise<CommandResult> {
 async function runTeam(args: string[]): Promise<CommandResult> {
   const subcommand = args[0] || 'status';
 
-  const workspace = await ensureWorkspace(process.cwd());
-  if (!workspace) {
-    return { success: false, output: '', error: 'No workspace found.' };
+  const cwd = process.cwd();
+  const workspaceId = await resolveWorkspaceId(cwd);
+  if (!workspaceId) {
+    return { success: false, output: '', error: noWorkspaceDiagnostic(cwd) };
   }
-
-  const workspaceId = workspace.workspace_id;
 
   switch (subcommand) {
     case 'status': {

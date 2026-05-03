@@ -25,6 +25,20 @@ import { checkDuplicateResume, recordResumeInjection, hashTask, isPromptTrivial 
 import { renderResumePack } from './render-injection.js';
 import { bufferEvent, flushEventBuffer } from './event-buffer.js';
 const HOOK_TIMEOUT_MS = 30000;
+function reportEventFlow(status, detail) {
+    if (process.env.SIFTMEMORY_HOOK_DIAGNOSTICS !== '1') {
+        return;
+    }
+    process.stderr.write(detail ? `${status}: ${detail}\n` : `${status}\n`);
+}
+async function resolveHookWorkspaceId(input, cwd) {
+    const providedWorkspaceId = input.workspace_id || process.env.SIFTMEMORY_WORKSPACE_ID;
+    if (typeof providedWorkspaceId === 'string' && providedWorkspaceId.trim()) {
+        return providedWorkspaceId.trim();
+    }
+    const workspace = await ensureWorkspace(cwd);
+    return workspace?.workspace_id ?? null;
+}
 /**
  * Build an IngestEventRequest compatible object for the daemon.
  * This ensures the correct contract with workspace_id top-level,
@@ -71,6 +85,37 @@ export function buildIngestEventRequest(params) {
         privacy_level: 'Private',
         client_event_id: client_event_id,
     };
+}
+export async function capturePostToolUseEvent(params) {
+    const hookName = params.hookName || 'post-tool-use';
+    const eventType = classifyToolEvent({
+        tool_name: params.input.tool_name,
+        tool_input: params.input.tool_input,
+    });
+    const sanitized = sanitizeToolPayload({
+        tool_name: params.input.tool_name,
+        tool_input: params.input.tool_input,
+        tool_output: params.input.tool_output,
+        session_id: params.sessionId,
+        tool_use_id: params.input.tool_use_id,
+        hook_event_name: hookName,
+    }, eventType);
+    const ingestRequest = buildIngestEventRequest({
+        sanitized,
+        workspaceId: params.workspaceId,
+        sessionId: params.sessionId,
+        hookName,
+        eventType,
+    });
+    const bufferResult = await bufferEvent(ingestRequest);
+    if (bufferResult.status === 'failed') {
+        return {
+            status: 'failed',
+            ingestRequest,
+            error: bufferResult.error,
+        };
+    }
+    return { status: 'buffered', ingestRequest };
 }
 /**
  * Read and parse hook input from stdin.
@@ -221,26 +266,30 @@ async function runHook(hookName, args) {
     if (hookName === 'post-tool-use') {
         const readiness = await runtimeReadinessService.ensureReady('post_tool_use');
         if (!readiness.ready) {
+            reportEventFlow('Event intentionally skipped', 'runtime not ready');
             process.exit(0);
         }
-        const workspace = await ensureWorkspace(process.cwd());
-        if (!workspace) {
+        const workspaceId = await resolveHookWorkspaceId(input, process.cwd());
+        if (!workspaceId) {
+            reportEventFlow('Event intentionally skipped', 'workspace could not be resolved');
             process.exit(0);
         }
         try {
-            const eventType = classifyToolEvent({ tool_name: input.tool_name, tool_input: input.tool_input });
-            const sanitized = sanitizeToolPayload({ tool_name: input.tool_name, tool_input: input.tool_input, tool_output: input.tool_output, hook_event_name: hookName }, eventType);
-            const ingestRequest = buildIngestEventRequest({
-                sanitized,
-                workspaceId: workspace.workspace_id,
-                sessionId: sessionId,
-                hookName: hookName,
-                eventType: eventType,
+            const result = await capturePostToolUseEvent({
+                input,
+                workspaceId,
+                sessionId,
+                hookName,
             });
-            await bufferEvent(ingestRequest);
+            if (result.status === 'buffered') {
+                reportEventFlow('Event buffered locally');
+            }
+            else {
+                reportEventFlow('Event failed', result.error);
+            }
         }
-        catch {
-            // Fail silently
+        catch (error) {
+            reportEventFlow('Event failed', error instanceof Error ? error.message : String(error));
         }
         process.exit(0);
     }
@@ -283,7 +332,18 @@ async function runHook(hookName, args) {
         if (!readiness.ready) {
             process.exit(0);
         }
-        await flushEventBuffer();
+        const result = await flushEventBuffer();
+        if (process.env.SIFTMEMORY_HOOK_DIAGNOSTICS === '1') {
+            if (result.status === 'sent_to_daemon') {
+                process.stderr.write(`Event sent directly to daemon: flushed ${result.eventCount} buffered event(s)\n`);
+            }
+            else if (result.status === 'intentionally_skipped') {
+                process.stderr.write('Event intentionally skipped: no buffered events to flush\n');
+            }
+            else {
+                process.stderr.write(`Event failed: ${result.error}\n`);
+            }
+        }
         process.exit(0);
     }
     // PreCompact: inject resume pack before compaction

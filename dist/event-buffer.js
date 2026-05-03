@@ -1,6 +1,7 @@
 /**
  * Event Buffer
- * Buffers events to disk during daemon outages.
+ * Buffers sanitized events to disk before daemon ingestion.
+ * PostToolBatch and terminal hooks flush the buffer to /v1/events/batch.
  */
 import { existsSync, appendFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
@@ -28,22 +29,35 @@ export async function bufferEvent(event) {
         if (stats.size > MAX_BUFFER_SIZE) {
             rotateBuffer();
         }
+        return { status: 'buffered', file: BUFFER_FILE };
     }
-    catch {
-        // Non-fatal - buffer failures should not block hooks
+    catch (error) {
+        return {
+            status: 'failed',
+            file: BUFFER_FILE,
+            error: error instanceof Error ? error.message : String(error),
+        };
     }
+}
+function isBatchResponseSuccess(response, body) {
+    if (!response.ok)
+        return false;
+    if (typeof body === 'object' && body !== null && 'ok' in body) {
+        return body.ok === true;
+    }
+    return true;
 }
 export async function flushEventBuffer() {
     ensureBufferDir();
     if (!existsSync(BUFFER_FILE)) {
-        return;
+        return { status: 'intentionally_skipped', reason: 'empty_buffer' };
     }
-    const { readFileSync, unlinkSync, writeFileSync } = await import('fs');
+    const { readFileSync, unlinkSync } = await import('fs');
     const { configService } = await import('./runtime/config.js');
     const content = readFileSync(BUFFER_FILE, 'utf-8');
     const lines = content.split('\n').filter(Boolean);
     if (lines.length === 0) {
-        return;
+        return { status: 'intentionally_skipped', reason: 'empty_buffer' };
     }
     // Group events by workspace_id
     const eventsByWorkspace = new Map();
@@ -66,7 +80,16 @@ export async function flushEventBuffer() {
         }
     }
     const daemonUrl = configService.getDaemonUrl();
+    let eventCount = 0;
+    for (const events of eventsByWorkspace.values()) {
+        eventCount += events.length;
+    }
+    if (eventCount === 0) {
+        return { status: 'intentionally_skipped', reason: 'empty_buffer' };
+    }
     // Flush each workspace's events as a batch
+    let allBatchesSucceeded = true;
+    let lastError = '';
     for (const [workspaceId, events] of eventsByWorkspace) {
         try {
             const response = await fetch(`${daemonUrl}/v1/events/batch`, {
@@ -74,23 +97,39 @@ export async function flushEventBuffer() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ workspace_id: workspaceId, events }),
             });
-            if (response.ok) {
-                // Successfully flushed this workspace's events
+            let body = null;
+            try {
+                body = await response.json();
+            }
+            catch { }
+            if (!isBatchResponseSuccess(response, body)) {
+                allBatchesSucceeded = false;
+                lastError = `daemon returned ${response.status}`;
             }
         }
-        catch {
+        catch (error) {
+            allBatchesSucceeded = false;
+            lastError = error instanceof Error ? error.message : String(error);
             // Keep buffer for next flush - don't delete
         }
     }
-    // Only delete buffer if all batches succeeded
-    // For simplicity, we delete if at least one batch succeeded
-    // In production, you'd want more sophisticated tracking
+    if (!allBatchesSucceeded) {
+        return {
+            status: 'failed',
+            workspaceCount: eventsByWorkspace.size,
+            eventCount,
+            error: lastError || 'event batch flush failed',
+        };
+    }
     try {
         unlinkSync(BUFFER_FILE);
     }
-    catch {
-        // Keep buffer for next flush
-    }
+    catch { }
+    return {
+        status: 'sent_to_daemon',
+        workspaceCount: eventsByWorkspace.size,
+        eventCount,
+    };
 }
 function rotateBuffer() {
     try {

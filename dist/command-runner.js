@@ -13,6 +13,15 @@ import { getDaemonHealth, buildResumePack, ensureWorkspace, daemonClient, isApiS
 import { binaryResolver } from './runtime/binary-resolver.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const COMMANDS_DIR = join(__dirname, '..', 'commands');
+const noWorkspaceDiagnostic = (cwd) => `No workspace found. Tried SIFTMEMORY_WORKSPACE_ID and /v1/workspaces/init for cwd: ${cwd}`;
+async function resolveWorkspaceId(cwd) {
+    const workspaceId = process.env.SIFTMEMORY_WORKSPACE_ID?.trim();
+    if (workspaceId) {
+        return workspaceId;
+    }
+    const workspace = await ensureWorkspace(cwd);
+    return workspace?.workspace_id ?? null;
+}
 export async function runCommand(name, args) {
     try {
         switch (name) {
@@ -123,13 +132,14 @@ async function runResume(args) {
         return { success: false, output: '', error: 'SiftMemory is not ready.' };
     }
     const task = args.join(' ').trim() || 'Resume reasoning';
-    const workspace = await ensureWorkspace(process.cwd());
-    if (!workspace) {
-        return { success: false, output: '', error: 'No workspace found.' };
+    const cwd = process.cwd();
+    const workspaceId = await resolveWorkspaceId(cwd);
+    if (!workspaceId) {
+        return { success: false, output: '', error: noWorkspaceDiagnostic(cwd) };
     }
     try {
         const result = await buildResumePack({
-            workspaceId: workspace.workspace_id,
+            workspaceId,
             sessionId: process.env.SIFTMEMORY_SESSION_ID || 'unknown',
             task,
             mode: 'standard',
@@ -185,11 +195,11 @@ async function runDoctor() {
 }
 async function runTeam(args) {
     const subcommand = args[0] || 'status';
-    const workspace = await ensureWorkspace(process.cwd());
-    if (!workspace) {
-        return { success: false, output: '', error: 'No workspace found.' };
+    const cwd = process.cwd();
+    const workspaceId = await resolveWorkspaceId(cwd);
+    if (!workspaceId) {
+        return { success: false, output: '', error: noWorkspaceDiagnostic(cwd) };
     }
-    const workspaceId = workspace.workspace_id;
     switch (subcommand) {
         case 'status': {
             const response = await daemonClient.collectiveStatus(workspaceId);

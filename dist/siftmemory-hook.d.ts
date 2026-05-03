@@ -13,6 +13,19 @@
  *
  * Input: Claude hook JSON is read from stdin. Env vars used as fallback.
  */
+export interface HookInput {
+    hook_event_name?: string;
+    session_id?: string;
+    workspace_id?: string;
+    prompt?: string;
+    tool_use_id?: string;
+    tool_name?: string;
+    tool_input?: Record<string, unknown>;
+    tool_output?: unknown;
+    error?: string;
+    cwd?: string;
+    [key: string]: unknown;
+}
 /**
  * Build an IngestEventRequest compatible object for the daemon.
  * This ensures the correct contract with workspace_id top-level,
@@ -25,4 +38,14 @@ export declare function buildIngestEventRequest(params: {
     hookName: string;
     eventType: string;
 }): Record<string, unknown>;
+export declare function capturePostToolUseEvent(params: {
+    input: HookInput;
+    workspaceId: string;
+    sessionId: string;
+    hookName?: string;
+}): Promise<{
+    status: 'buffered' | 'failed';
+    ingestRequest?: Record<string, unknown>;
+    error?: string;
+}>;
 //# sourceMappingURL=siftmemory-hook.d.ts.map
