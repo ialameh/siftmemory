@@ -7,7 +7,7 @@
  */
 import { runtimeReadinessService } from '../runtime/readiness.js';
 import { configService } from '../runtime/config.js';
-import { daemonClient, apiFetch, isApiSuccess, getApiError } from '../daemon-http.js';
+import { daemonClient, apiFetch, isApiSuccess, getApiError, ensureWorkspace } from '../daemon-http.js';
 import { getToolDefinitions } from './tool-definitions.js';
 export { getToolDefinitions };
 export class ToolHandlers {
@@ -35,6 +35,13 @@ export class ToolHandlers {
         this.handlers.set('siftmemory_collective_validate', this.handleCollectiveValidate.bind(this));
         this.handlers.set('siftmemory_collective_conflicts', this.handleCollectiveConflicts.bind(this));
     }
+    async resolveWorkspaceId(workspaceId) {
+        if (workspaceId?.trim()) {
+            return workspaceId.trim();
+        }
+        const workspace = await ensureWorkspace(process.cwd());
+        return workspace?.workspace_id ?? null;
+    }
     async handle(request) {
         const handler = this.handlers.get(request.params.name);
         if (!handler) {
@@ -60,8 +67,12 @@ export class ToolHandlers {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
         const { workspace_id, session_id, task, mode, token_budget, include_private, include_collective, collective_policy } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
         const result = await daemonClient.buildResume({
-            workspace_id: workspace_id || process.cwd(),
+            workspace_id: resolvedWorkspaceId,
             session_id: session_id || process.env.SIFTMEMORY_SESSION_ID || 'unknown',
             task: task || 'resume',
             mode: mode || 'standard',
@@ -115,10 +126,14 @@ export class ToolHandlers {
         }
         // POST /v1/retrieval/candidates with workspace_id and scope params
         const { workspace_id, scope, include_invalid, format } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
         const result = await apiFetch(configService.getDaemonUrl(), '/v1/retrieval/candidates', {
             method: 'POST',
             body: JSON.stringify({
-                workspace_id: workspace_id || process.cwd(),
+                workspace_id: resolvedWorkspaceId,
                 scope: scope || 'workspace',
                 include_invalid: include_invalid ?? false,
                 format: format || 'summary',
@@ -149,10 +164,14 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { query, limit } = args;
+        const { query, limit, workspace_id } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
         const result = await apiFetch(configService.getDaemonUrl(), '/v1/retrieval/candidates', {
             method: 'POST',
-            body: JSON.stringify({ query, limit: limit || 5 }),
+            body: JSON.stringify({ workspace_id: resolvedWorkspaceId, scope: { query }, limit: limit || 5 }),
         });
         if (!isApiSuccess(result)) {
             return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
@@ -165,8 +184,12 @@ export class ToolHandlers {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
         const { workspace_id, session_id, claim, evidence, uncertainty, invalidation_rule, tags, origin } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
         const result = await daemonClient.extractCheckpoint({
-            workspace_id: workspace_id || process.cwd(),
+            workspace_id: resolvedWorkspaceId,
             session_id: session_id || process.env.SIFTMEMORY_SESSION_ID || 'unknown',
             event_ids: [],
             claim,
@@ -186,8 +209,12 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { id } = args;
-        const result = await apiFetch(configService.getDaemonUrl(), `/v1/checkpoints/${id}`, { method: 'GET' });
+        const { id, workspace_id } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
+        const result = await apiFetch(configService.getDaemonUrl(), `/v1/checkpoints/${encodeURIComponent(id)}?workspace_id=${encodeURIComponent(resolvedWorkspaceId)}`, { method: 'GET' });
         if (!isApiSuccess(result)) {
             return { content: [{ type: 'text', text: `Not found: ${id}` }], isError: true };
         }
@@ -199,14 +226,19 @@ export class ToolHandlers {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
         const { workspace_id, since, until, status, limit } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
         const params = new URLSearchParams();
+        params.set('workspace_id', resolvedWorkspaceId);
+        params.set('limit', String(limit || 20));
         if (since)
             params.set('since', since);
         if (until)
             params.set('until', until);
         if (status)
             params.set('status', status);
-        params.set('limit', String(limit || 20));
         const result = await apiFetch(configService.getDaemonUrl(), `/v1/checkpoints?${params}`, { method: 'GET' });
         if (!isApiSuccess(result)) {
             return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
@@ -219,8 +251,12 @@ export class ToolHandlers {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
         const { workspace_id, session_id, task, mode, token_budget } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
         const result = await daemonClient.buildResume({
-            workspace_id: workspace_id || process.cwd(),
+            workspace_id: resolvedWorkspaceId,
             session_id: session_id || process.env.SIFTMEMORY_SESSION_ID || 'unknown',
             task: task || 'context inject',
             mode: mode || 'standard',
@@ -240,11 +276,11 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const result = await apiFetch(configService.getDaemonUrl(), '/v1/stats', { method: 'GET' });
-        if (!isApiSuccess(result)) {
-            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
+        const health = await daemonClient.health();
+        if (!isApiSuccess(health)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(health)}` }], isError: true };
         }
-        return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
+        return { content: [{ type: 'text', text: JSON.stringify({ health: health.data }, null, 2) }] };
     }
     async handleHealth(args) {
         // Health check uses GET /v1/health
@@ -263,8 +299,12 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        // Collective endpoints return FEATURE_NOT_IMPLEMENTED per spec
-        const result = await apiFetch(configService.getDaemonUrl(), '/v1/collective/status', { method: 'GET' });
+        const { workspace_id } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
+        const result = await apiFetch(configService.getDaemonUrl(), `/v1/collective/status?workspace_id=${encodeURIComponent(resolvedWorkspaceId)}`, { method: 'GET' });
         return {
             content: [{
                     type: 'text',
@@ -337,7 +377,12 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const result = await apiFetch(configService.getDaemonUrl(), '/v1/collective/conflicts', { method: 'GET' });
+        const { workspace_id } = args;
+        const resolvedWorkspaceId = await this.resolveWorkspaceId(workspace_id);
+        if (!resolvedWorkspaceId) {
+            return { content: [{ type: 'text', text: 'Failed: workspace could not be resolved' }], isError: true };
+        }
+        const result = await apiFetch(configService.getDaemonUrl(), `/v1/collective/conflicts?workspace_id=${encodeURIComponent(resolvedWorkspaceId)}`, { method: 'GET' });
         return {
             content: [{
                     type: 'text',

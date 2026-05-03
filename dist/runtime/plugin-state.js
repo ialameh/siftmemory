@@ -1,4 +1,4 @@
-import { writeFileSync, readFileSync, existsSync, renameSync, unlinkSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, renameSync, unlinkSync, mkdirSync, openSync, closeSync } from 'fs';
 import { resolve } from 'path';
 import { homedir } from 'os';
 const SIFT_MEMORY_DIR = resolve(homedir(), '.siftmemory');
@@ -13,6 +13,7 @@ function ensureSiftMemoryDir() {
 }
 export class PluginStateStore {
     lockAcquiredAt = null;
+    lockToken = null;
     async get() {
         ensureSiftMemoryDir();
         this.acquireLock();
@@ -55,35 +56,82 @@ export class PluginStateStore {
     acquireLock() {
         ensureSiftMemoryDir();
         const deadline = Date.now() + LOCK_TTL_MS;
-        while (existsSync(STATE_LOCK_FILE)) {
-            if (Date.now() > deadline) {
+        const token = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+        while (Date.now() <= deadline) {
+            try {
+                const fd = openSync(STATE_LOCK_FILE, 'wx');
                 try {
-                    unlinkSync(STATE_LOCK_FILE);
+                    writeFileSync(fd, token);
                 }
-                catch {
-                    // Ignore
+                finally {
+                    closeSync(fd);
                 }
-                break;
+                this.lockAcquiredAt = Date.now();
+                this.lockToken = token;
+                return;
+            }
+            catch {
+                if (this.isLockExpired()) {
+                    try {
+                        unlinkSync(STATE_LOCK_FILE);
+                    }
+                    catch { }
+                    continue;
+                }
+                this.sleepSync(25);
             }
         }
-        try {
-            writeFileSync(STATE_LOCK_FILE, `${Date.now()}`);
-            this.lockAcquiredAt = Date.now();
+        if (this.isLockExpired()) {
+            try {
+                unlinkSync(STATE_LOCK_FILE);
+            }
+            catch { }
+            try {
+                const fd = openSync(STATE_LOCK_FILE, 'wx');
+                try {
+                    writeFileSync(fd, token);
+                }
+                finally {
+                    closeSync(fd);
+                }
+                this.lockAcquiredAt = Date.now();
+                this.lockToken = token;
+                return;
+            }
+            catch {
+                // Fall through to fail open.
+            }
         }
-        catch {
-            // Lock file may fail in some environments - continue anyway
-        }
+        throw new Error(`Failed to acquire SiftMemory plugin state lock: ${STATE_LOCK_FILE}`);
     }
     releaseLock() {
+        const token = this.lockToken;
         this.lockAcquiredAt = null;
+        this.lockToken = null;
         try {
-            if (existsSync(STATE_LOCK_FILE)) {
+            if (existsSync(STATE_LOCK_FILE) && readFileSync(STATE_LOCK_FILE, 'utf-8') === token) {
                 unlinkSync(STATE_LOCK_FILE);
             }
         }
         catch {
             // Ignore
         }
+    }
+    isLockExpired() {
+        if (!existsSync(STATE_LOCK_FILE)) {
+            return false;
+        }
+        try {
+            const content = readFileSync(STATE_LOCK_FILE, 'utf-8');
+            const timestamp = Number(content.split(':')[1] || '0');
+            return Number.isFinite(timestamp) && Date.now() - timestamp > LOCK_TTL_MS;
+        }
+        catch {
+            return true;
+        }
+    }
+    sleepSync(ms) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
     }
 }
 export const pluginStateStore = new PluginStateStore();

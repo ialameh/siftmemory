@@ -1,22 +1,34 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import { daemonHealthClient } from './daemon-health.js';
+import { configService } from './config.js';
 export class DaemonSupervisor extends EventEmitter {
     runningProcess = null;
     currentPid = null;
     async startDaemon(daemonPath, timeoutMs = 5000) {
         try {
+            const daemonUrl = configService.getDaemonUrl();
+            const daemonEnv = { ...process.env, SIFTMEMORY_STARTED_BY: 'claude-plugin' };
+            try {
+                const parsed = new URL(daemonUrl);
+                if (parsed.hostname) {
+                    daemonEnv.SIFTMEMORY_HOST = parsed.hostname;
+                }
+                if (parsed.port) {
+                    daemonEnv.SIFTMEMORY_PORT = parsed.port;
+                }
+            }
+            catch {
+                // Keep existing environment if daemonUrl is not parseable.
+            }
             this.runningProcess = spawn(daemonPath, [], {
                 detached: true,
                 stdio: 'ignore',
-                env: {
-                    ...process.env,
-                    SIFTMEMORY_STARTED_BY: 'claude-plugin'
-                }
+                env: daemonEnv
             });
             this.currentPid = this.runningProcess.pid || null;
             this.runningProcess.unref();
-            const healthy = await daemonHealthClient.waitUntilHealthy('http://127.0.0.1:7777', timeoutMs);
+            const healthy = await daemonHealthClient.waitUntilHealthy(daemonUrl, timeoutMs);
             if (!healthy.ok) {
                 this.runningProcess = null;
                 this.currentPid = null;

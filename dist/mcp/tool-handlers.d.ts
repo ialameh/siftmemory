@@ -20,6 +20,7 @@ export declare class ToolHandlers {
     private handlers;
     constructor();
     private registerHandlers;
+    private resolveWorkspaceId;
     handle(request: {
         params: {
             name: string;

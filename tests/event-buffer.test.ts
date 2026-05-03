@@ -33,6 +33,34 @@ describe('Event buffer flushing', () => {
     rmSync(tempHome, { recursive: true, force: true });
   });
 
+  it('bufferEvent returns buffered and creates the buffer file', async () => {
+    const { bufferEvent, getBufferedEventCount } = await import('../scripts/event-buffer.js');
+    const event = {
+      workspace_id: 'workspace-1',
+      session_id: 'session-1',
+      event_type: 'ManualNote',
+      payload_json: {},
+    };
+
+    const result = await bufferEvent(event);
+    const bufferFile = join(tempHome, '.siftmemory', 'claude-plugin-buffer.ndjson');
+
+    expect(result).toMatchObject({ status: 'buffered', file: bufferFile });
+    expect(existsSync(bufferFile)).toBe(true);
+    expect(readFileSync(bufferFile, 'utf-8')).toContain('"workspace_id":"workspace-1"');
+    expect(await getBufferedEventCount()).toBe(1);
+  });
+
+  it('flushEventBuffer intentionally skips when there is no buffer', async () => {
+    const { flushEventBuffer } = await import('../scripts/event-buffer.js');
+
+    await expect(flushEventBuffer()).resolves.toEqual({
+      status: 'intentionally_skipped',
+      reason: 'empty_buffer',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('flushEventBuffer sends { workspace_id, events } to the daemon', async () => {
     const { bufferEvent, flushEventBuffer } = await import('../scripts/event-buffer.js');
     const event = {

@@ -3,7 +3,7 @@
  * Buffers sanitized events to disk before daemon ingestion.
  * PostToolBatch and terminal hooks flush the buffer to /v1/events/batch.
  */
-import { existsSync, appendFileSync, mkdirSync } from 'fs';
+import { existsSync, appendFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, renameSync, } from 'fs';
 import { resolve } from 'path';
 import { homedir } from 'os';
 const BUFFER_DIR = resolve(homedir(), '.siftmemory');
@@ -22,7 +22,7 @@ export async function bufferEvent(event) {
         // Rotate if too large
         const stats = { size: 0 };
         try {
-            const content = require('fs').readFileSync(BUFFER_FILE, 'utf-8');
+            const content = readFileSync(BUFFER_FILE, 'utf-8');
             stats.size = content.length;
         }
         catch { }
@@ -52,7 +52,6 @@ export async function flushEventBuffer() {
     if (!existsSync(BUFFER_FILE)) {
         return { status: 'intentionally_skipped', reason: 'empty_buffer' };
     }
-    const { readFileSync, unlinkSync } = await import('fs');
     const { configService } = await import('./runtime/config.js');
     const content = readFileSync(BUFFER_FILE, 'utf-8');
     const lines = content.split('\n').filter(Boolean);
@@ -133,7 +132,6 @@ export async function flushEventBuffer() {
 }
 function rotateBuffer() {
     try {
-        const { readFileSync, unlinkSync, writeFileSync, renameSync } = require('fs');
         const timestamp = Date.now();
         const rotated = `${BUFFER_FILE}.${timestamp}`;
         renameSync(BUFFER_FILE, rotated);
@@ -148,7 +146,7 @@ export async function getBufferedEventCount() {
         return 0;
     }
     try {
-        const content = require('fs').readFileSync(BUFFER_FILE, 'utf-8');
+        const content = readFileSync(BUFFER_FILE, 'utf-8');
         return content.split('\n').filter(Boolean).length;
     }
     catch {

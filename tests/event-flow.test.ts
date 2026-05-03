@@ -83,6 +83,63 @@ describe('PostToolUse event flow', () => {
     expect(request.payload_json).not.toHaveProperty('new_string');
   });
 
+  it('buildIngestEventRequest keeps command_hash and output_hash inside payload_json', async () => {
+    const { buildIngestEventRequest } = await import('../scripts/siftmemory-hook.js');
+    const { sanitizeToolPayload } = await import('../scripts/payload-sanitizer.js');
+
+    const sanitized = sanitizeToolPayload(
+      {
+        tool_name: 'Bash',
+        tool_input: { command: 'npm test', exit_code: 0 },
+        tool_output: { stdout: 'tests passed' },
+        session_id: 'session-1',
+        tool_use_id: 'tool-1',
+        hook_event_name: 'post-tool-use',
+      },
+      'TestRun'
+    );
+
+    const request = buildIngestEventRequest({
+      sanitized,
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      hookName: 'post-tool-use',
+      eventType: 'TestRun',
+    });
+
+    expect(request).not.toHaveProperty('command_hash');
+    expect(request).not.toHaveProperty('output_hash');
+    expect(request.payload_json).toHaveProperty('command_hash');
+    expect(request.payload_json).toHaveProperty('output_hash');
+  });
+
+  it('buildIngestEventRequest keeps pattern_hash inside payload_json', async () => {
+    const { buildIngestEventRequest } = await import('../scripts/siftmemory-hook.js');
+    const { sanitizeToolPayload } = await import('../scripts/payload-sanitizer.js');
+
+    const sanitized = sanitizeToolPayload(
+      {
+        tool_name: 'Grep',
+        tool_input: { pattern: 'TODO.*fixme', matches: [{ file_path: 'src/main.ts' }] },
+        session_id: 'session-1',
+        tool_use_id: 'tool-1',
+        hook_event_name: 'post-tool-use',
+      },
+      'ManualNote'
+    );
+
+    const request = buildIngestEventRequest({
+      sanitized,
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      hookName: 'post-tool-use',
+      eventType: 'ManualNote',
+    });
+
+    expect(request).not.toHaveProperty('pattern_hash');
+    expect(request.payload_json).toHaveProperty('pattern_hash');
+  });
+
   it('does not emit unsupported FileWrite or Search event types', async () => {
     const { classifyToolEvent } = await import('../scripts/payload-sanitizer.js');
 

@@ -18,8 +18,6 @@ export interface DaemonClient {
     collectiveImport(workspaceId: string): Promise<ApiResponse<unknown>>;
 }
 declare class DaemonClientImpl implements DaemonClient {
-    private baseUrl;
-    constructor();
     private fetch;
     health(): Promise<ApiResponse<HealthData>>;
     initWorkspace(repoRoot: string, userEmail?: string, createRepoConfig?: boolean): Promise<ApiResponse<InitWorkspaceResponse>>;

@@ -37,12 +37,6 @@ export interface DaemonClient {
 }
 
 class DaemonClientImpl implements DaemonClient {
-  private baseUrl: string;
-
-  constructor() {
-    this.baseUrl = configService.getDaemonUrl();
-  }
-
   private async fetch<T>(
     path: string,
     options?: RequestInit & { timeoutMs?: number; retries?: number }
@@ -50,7 +44,7 @@ class DaemonClientImpl implements DaemonClient {
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const retries = options?.retries ?? 0;
     const fetchHeaders = options?.headers;
-    const url = `${this.baseUrl}${path}`;
+    const url = `${configService.getDaemonUrl()}${path}`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);

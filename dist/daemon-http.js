@@ -8,15 +8,11 @@ const DEFAULT_TIMEOUT_MS = 10000;
 const RETRY_BACKOFF_MS = [1000, 3000, 10000];
 const MAX_RETRIES = 3;
 class DaemonClientImpl {
-    baseUrl;
-    constructor() {
-        this.baseUrl = configService.getDaemonUrl();
-    }
     async fetch(path, options) {
         const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
         const retries = options?.retries ?? 0;
         const fetchHeaders = options?.headers;
-        const url = `${this.baseUrl}${path}`;
+        const url = `${configService.getDaemonUrl()}${path}`;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
