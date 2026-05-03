@@ -3,7 +3,8 @@
  * Formats resume packs for hook output.
  */
 export function renderResumePack(data) {
-    const context = data.context || '';
+    // API returns rendered_markdown, but context is also supported
+    const context = data.rendered_markdown || data.context || '';
     // Plain stdout format
     const output = `# SiftMemory: Reasoning Resume Pack
 

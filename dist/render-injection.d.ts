@@ -6,6 +6,7 @@ export type HookOutputMode = 'plain_stdout' | 'structured_json';
 export declare function renderResumePack(data: {
     resume_pack_id?: string;
     context?: string;
+    rendered_markdown?: string;
     checkpoints?: unknown[];
     claims?: unknown[];
 }): string;

@@ -19,12 +19,11 @@ import { runtimeReadinessService } from './runtime/readiness.js';
 import { configService } from './runtime/config.js';
 import { daemonHealthClient } from './runtime/daemon-health.js';
 import { pluginStateStore } from './runtime/plugin-state.js';
-import { ensureWorkspace } from './daemon-client.js';
+import { ensureWorkspace, recordOutcome as recordSessionOutcome, buildResumePack } from './daemon-http.js';
 import { classifyToolEvent, sanitizeToolPayload } from './payload-sanitizer.js';
 import { checkDuplicateResume, recordResumeInjection, hashTask, isPromptTrivial } from './duplicate-suppression.js';
 import { renderResumePack } from './render-injection.js';
 import { bufferEvent, flushEventBuffer } from './event-buffer.js';
-import { recordOutcome } from './daemon-client.js';
 const HOOK_TIMEOUT_MS = 30000;
 /**
  * Generate a stable client_event_id from session_id + hook_event_name + tool_use_id + event_type
@@ -133,39 +132,30 @@ async function runHook(hookName, args) {
         if (isPromptTrivial(prompt)) {
             process.exit(0);
         }
-        // Build resume pack
-        const daemonUrl = configService.getDaemonUrl();
         const taskHash = hashTask(prompt);
         try {
-            const response = await fetch(`${daemonUrl}/v1/resume/build`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    workspace_id: workspace.workspace_id,
-                    session_id: sessionId,
-                    task: prompt,
-                    mode: 'standard',
-                    token_budget: 4000,
-                    include_collective: true,
-                    include_private: false,
-                    collective_policy: 'validated_only',
-                }),
+            const result = await buildResumePack({
+                workspaceId: workspace.workspace_id,
+                sessionId: sessionId,
+                task: prompt,
+                mode: 'standard',
+                tokenBudget: 4096,
+                includePrivate: false,
+                includeCollective: true,
+                collectivePolicy: 'validated_only',
             });
-            if (response.ok) {
-                const data = await response.json();
-                const clientEventId = generateClientEventId({
-                    sessionId,
-                    hookEventName: hookName,
-                    eventType: 'resume_inject',
-                });
+            if (result.resume_pack_id) {
                 // Check duplicate - now requires resumePackId to check against
-                const dupCheck = await checkDuplicateResume(workspace.workspace_id, prompt, data.resume_pack_id || 'unknown');
+                const dupCheck = await checkDuplicateResume(workspace.workspace_id, prompt, result.resume_pack_id);
                 if (dupCheck.shouldSkip) {
                     process.exit(0);
                 }
-                const rendered = renderResumePack(data);
+                const rendered = renderResumePack({
+                    resume_pack_id: result.resume_pack_id,
+                    context: result.rendered_markdown,
+                });
                 process.stdout.write(rendered);
-                await recordResumeInjection(workspace.workspace_id, data.resume_pack_id || 'unknown', taskHash);
+                await recordResumeInjection(workspace.workspace_id, result.resume_pack_id, taskHash);
             }
         }
         catch {
@@ -286,7 +276,7 @@ async function runHook(hookName, args) {
             process.exit(0);
         }
         await flushEventBuffer();
-        await recordOutcome(workspace.workspace_id, 'neutral', '');
+        await recordSessionOutcome(workspace.workspace_id, 'neutral', '');
         process.exit(0);
     }
     // StopFailure: record failed outcome
@@ -300,7 +290,7 @@ async function runHook(hookName, args) {
             process.exit(0);
         }
         await flushEventBuffer();
-        await recordOutcome(workspace.workspace_id, 'failed', '');
+        await recordSessionOutcome(workspace.workspace_id, 'failed', '');
         process.exit(0);
     }
     // CwdChanged: update workspace mapping
@@ -330,7 +320,7 @@ async function runHook(hookName, args) {
         const workspace = await ensureWorkspace(process.cwd());
         if (workspace) {
             await flushEventBuffer();
-            await recordOutcome(workspace.workspace_id, 'neutral', '');
+            await recordSessionOutcome(workspace.workspace_id, 'neutral', '');
         }
         process.exit(0);
     }
@@ -344,7 +334,7 @@ async function runHook(hookName, args) {
         if (!workspace) {
             process.exit(0);
         }
-        await recordOutcome(workspace.workspace_id, 'neutral', 'subagent_stop');
+        await recordSessionOutcome(workspace.workspace_id, 'neutral', 'subagent_stop');
         process.exit(0);
     }
     // Other hooks - fail open

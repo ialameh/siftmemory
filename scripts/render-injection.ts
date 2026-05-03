@@ -8,10 +8,12 @@ export type HookOutputMode = 'plain_stdout' | 'structured_json';
 export function renderResumePack(data: {
   resume_pack_id?: string;
   context?: string;
+  rendered_markdown?: string;
   checkpoints?: unknown[];
   claims?: unknown[];
 }): string {
-  const context = data.context || '';
+  // API returns rendered_markdown, but context is also supported
+  const context = data.rendered_markdown || data.context || '';
 
   // Plain stdout format
   const output = `# SiftMemory: Reasoning Resume Pack

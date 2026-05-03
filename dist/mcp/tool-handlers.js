@@ -3,9 +3,11 @@
  * Each handler calls runtimeReadinessService.ensureReady("mcp_tool").
  * Health check uses GET /v1/health (not POST).
  * Daemon URL comes from configService.getDaemonUrl().
+ * All responses properly parse the ApiResponse<T> envelope.
  */
 import { runtimeReadinessService } from '../runtime/readiness.js';
 import { configService } from '../runtime/config.js';
+import { daemonClient, apiFetch, isApiSuccess, getApiError } from '../daemon-http.js';
 import { getToolDefinitions } from './tool-definitions.js';
 export { getToolDefinitions };
 export class ToolHandlers {
@@ -52,57 +54,24 @@ export class ToolHandlers {
             };
         }
     }
-    async daemonFetch(path, options) {
-        const daemonUrl = configService.getDaemonUrl();
-        // Special case for health - uses GET, not POST
-        if (path === '/v1/health' && (!options || options.method === 'GET' || !options.method)) {
-            try {
-                const response = await fetch(`${daemonUrl}${path}`, {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' },
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    return { ok: data.ok !== false, data };
-                }
-                return { ok: false, error: `HTTP ${response.status}` };
-            }
-            catch (err) {
-                return { ok: false, error: String(err) };
-            }
-        }
-        try {
-            const method = options?.useGet ? 'GET' : (options?.method || 'POST');
-            const response = await fetch(`${daemonUrl}${path}`, {
-                ...options,
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(options?.headers || {}),
-                },
-            });
-            if (response.ok) {
-                const data = await response.json();
-                return { ok: true, data };
-            }
-            return { ok: false, error: `HTTP ${response.status}: ${response.statusText}` };
-        }
-        catch (err) {
-            return { ok: false, error: String(err) };
-        }
-    }
     async handleBuildResumePack(args) {
         const readiness = await runtimeReadinessService.ensureReady('mcp_tool');
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { scope = 'recent', limit = 5, cwd } = args;
-        const result = await this.daemonFetch('/v1/resume/build', {
-            method: 'POST',
-            body: JSON.stringify({ workspace_id: cwd || process.cwd(), scope, limit }),
+        const { workspace_id, session_id, task, mode, token_budget, include_private, include_collective, collective_policy } = args;
+        const result = await daemonClient.buildResume({
+            workspace_id: workspace_id || process.cwd(),
+            session_id: session_id || process.env.SIFTMEMORY_SESSION_ID || 'unknown',
+            task: task || 'resume',
+            mode: mode || 'standard',
+            token_budget: token_budget || 4096,
+            include_private: include_private ?? false,
+            include_collective: include_collective ?? true,
+            collective_policy: collective_policy || 'validated_only',
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -111,13 +80,9 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { event_type, tool_name, input, output, cwd } = args;
-        const result = await this.daemonFetch('/v1/events', {
-            method: 'POST',
-            body: JSON.stringify({ event_type, tool_name, input, output, workspace_id: cwd || process.cwd() }),
-        });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        const result = await daemonClient.ingestEvent(args);
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -126,13 +91,9 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { outcome, summary, checkpoint_ids, cwd } = args;
-        const result = await this.daemonFetch('/v1/outcomes', {
-            method: 'POST',
-            body: JSON.stringify({ outcome, summary, checkpoint_ids, workspace_id: cwd || process.cwd() }),
-        });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        const result = await daemonClient.recordOutcome(args);
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -141,13 +102,9 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { claim, evidence, uncertainty, invalidation_rule, tags, cwd } = args;
-        const result = await this.daemonFetch('/v1/checkpoints/extract', {
-            method: 'POST',
-            body: JSON.stringify({ claim, evidence: evidence || [], uncertainty, invalidation_rule, tags: tags || [], workspace_id: cwd || process.cwd() }),
-        });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        const result = await daemonClient.extractCheckpoint(args);
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -156,13 +113,19 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { scope = 'workspace', include_invalid = false, format = 'summary', cwd } = args;
-        const result = await this.daemonFetch('/v1/retrieval/candidates', {
+        // POST /v1/retrieval/candidates with workspace_id and scope params
+        const { workspace_id, scope, include_invalid, format } = args;
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/retrieval/candidates', {
             method: 'POST',
-            body: JSON.stringify({ workspace_id: cwd || process.cwd(), scope, include_invalid, format }),
+            body: JSON.stringify({
+                workspace_id: workspace_id || process.cwd(),
+                scope: scope || 'workspace',
+                include_invalid: include_invalid ?? false,
+                format: format || 'summary',
+            }),
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -171,13 +134,13 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { checkpoint_ids, reason, cwd } = args;
-        const result = await this.daemonFetch('/v1/checkpoints/suppress', {
+        const { checkpoint_ids, reason } = args;
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/checkpoints/suppress', {
             method: 'POST',
-            body: JSON.stringify({ checkpoint_ids, reason, workspace_id: cwd || process.cwd() }),
+            body: JSON.stringify({ checkpoint_ids, reason }),
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -186,13 +149,13 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { query, limit = 5 } = args;
-        const result = await this.daemonFetch('/v1/retrieval/candidates', {
+        const { query, limit } = args;
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/retrieval/candidates', {
             method: 'POST',
-            body: JSON.stringify({ query, limit }),
+            body: JSON.stringify({ query, limit: limit || 5 }),
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -201,22 +164,22 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { claim, evidence = [], uncertainty, invalidation_rule, tags = [] } = args;
-        const result = await this.daemonFetch('/v1/checkpoints/extract', {
-            method: 'POST',
-            body: JSON.stringify({
-                claim,
-                evidence,
-                uncertainty,
-                invalidation_rule,
-                tags,
-                workspace_id: process.cwd(),
-            }),
+        const { workspace_id, session_id, claim, evidence, uncertainty, invalidation_rule, tags, origin } = args;
+        const result = await daemonClient.extractCheckpoint({
+            workspace_id: workspace_id || process.cwd(),
+            session_id: session_id || process.env.SIFTMEMORY_SESSION_ID || 'unknown',
+            event_ids: [],
+            claim,
+            evidence: evidence || [],
+            uncertainty,
+            invalidation_rule,
+            tags: tags || [],
+            origin: origin || 'Manual',
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
-        return { content: [{ type: 'text', text: `Created: ${JSON.stringify(result.data)}` }] };
+        return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
     async handleCheckpointGet(args) {
         const readiness = await runtimeReadinessService.ensureReady('mcp_tool');
@@ -224,8 +187,8 @@ export class ToolHandlers {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
         const { id } = args;
-        const result = await this.daemonFetch(`/v1/checkpoints/${id}`, { useGet: true });
-        if (!result.ok) {
+        const result = await apiFetch(configService.getDaemonUrl(), `/v1/checkpoints/${id}`, { method: 'GET' });
+        if (!isApiSuccess(result)) {
             return { content: [{ type: 'text', text: `Not found: ${id}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
@@ -235,7 +198,7 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { since, until, status, limit = 20 } = args;
+        const { workspace_id, since, until, status, limit } = args;
         const params = new URLSearchParams();
         if (since)
             params.set('since', since);
@@ -243,11 +206,10 @@ export class ToolHandlers {
             params.set('until', until);
         if (status)
             params.set('status', status);
-        params.set('limit', String(limit));
-        params.set('workspace_id', process.cwd());
-        const result = await this.daemonFetch(`/v1/checkpoints?${params}`, { useGet: true });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        params.set('limit', String(limit || 20));
+        const result = await apiFetch(configService.getDaemonUrl(), `/v1/checkpoints?${params}`, { method: 'GET' });
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
@@ -256,40 +218,41 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { scope = 'recent', limit = 5 } = args;
-        const result = await this.daemonFetch('/v1/resume/build', {
-            method: 'POST',
-            body: JSON.stringify({
-                workspace_id: process.cwd(),
-                scope,
-                limit,
-            }),
+        const { workspace_id, session_id, task, mode, token_budget } = args;
+        const result = await daemonClient.buildResume({
+            workspace_id: workspace_id || process.cwd(),
+            session_id: session_id || process.env.SIFTMEMORY_SESSION_ID || 'unknown',
+            task: task || 'context inject',
+            mode: mode || 'standard',
+            token_budget: token_budget || 4096,
+            include_private: false,
+            include_collective: true,
+            collective_policy: 'validated_only',
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         const data = result.data;
-        return { content: [{ type: 'text', text: data?.context || 'No context available' }] };
+        return { content: [{ type: 'text', text: data?.rendered_markdown || 'No context available' }] };
     }
-    async handleStats(_args) {
+    async handleStats(args) {
         const readiness = await runtimeReadinessService.ensureReady('mcp_tool');
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const result = await this.daemonFetch('/v1/stats', { useGet: true });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/stats', { method: 'GET' });
+        if (!isApiSuccess(result)) {
+            return { content: [{ type: 'text', text: `Failed: ${getApiError(result)}` }], isError: true };
         }
         return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
     }
-    async handleHealth(_args) {
-        // Health check uses GET /v1/health - doesn't need full readiness
-        // But we still check MCP tool readiness for consistency
+    async handleHealth(args) {
+        // Health check uses GET /v1/health
         await runtimeReadinessService.ensureReady('mcp_tool');
-        const result = await this.daemonFetch('/v1/health');
-        if (!result.ok) {
+        const result = await daemonClient.health();
+        if (!isApiSuccess(result)) {
             return {
-                content: [{ type: 'text', text: 'Daemon is unhealthy' }],
+                content: [{ type: 'text', text: `Daemon unhealthy: ${getApiError(result)}` }],
                 isError: true,
             };
         }
@@ -300,81 +263,90 @@ export class ToolHandlers {
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { cwd } = args;
-        const result = await this.daemonFetch('/v1/collective/status', { useGet: true });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
-        }
-        return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
+        // Collective endpoints return FEATURE_NOT_IMPLEMENTED per spec
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/collective/status', { method: 'GET' });
+        return {
+            content: [{
+                    type: 'text',
+                    text: result.error?.code === 'FEATURE_NOT_IMPLEMENTED'
+                        ? 'Collective memory not yet implemented (Phase 6)'
+                        : JSON.stringify(result.data, null, 2),
+                }],
+            isError: result.error?.code === 'FEATURE_NOT_IMPLEMENTED',
+        };
     }
     async handleCollectiveImport(args) {
         const readiness = await runtimeReadinessService.ensureReady('mcp_tool');
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { cwd, validate_after_import = true } = args;
-        const result = await this.daemonFetch('/v1/collective/import', {
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/collective/import', {
             method: 'POST',
-            body: JSON.stringify({
-                workspace_id: cwd || process.cwd(),
-                validate_after_import,
-            }),
+            body: JSON.stringify(args),
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
-        }
-        return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
+        return {
+            content: [{
+                    type: 'text',
+                    text: result.error?.code === 'FEATURE_NOT_IMPLEMENTED'
+                        ? 'Collective memory not yet implemented (Phase 6)'
+                        : JSON.stringify(result.data, null, 2),
+                }],
+            isError: result.error?.code === 'FEATURE_NOT_IMPLEMENTED',
+        };
     }
     async handleCollectivePromote(args) {
         const readiness = await runtimeReadinessService.ensureReady('mcp_tool');
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { checkpoint_id, cwd } = args;
-        const result = await this.daemonFetch('/v1/collective/promote', {
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/collective/promote', {
             method: 'POST',
-            body: JSON.stringify({
-                workspace_id: cwd || process.cwd(),
-                checkpoint_id,
-                promotion_mode: 'manual',
-                target: 'repo_collective',
-            }),
+            body: JSON.stringify(args),
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
-        }
-        return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
+        return {
+            content: [{
+                    type: 'text',
+                    text: result.error?.code === 'FEATURE_NOT_IMPLEMENTED'
+                        ? 'Collective memory not yet implemented (Phase 6)'
+                        : JSON.stringify(result.data, null, 2),
+                }],
+            isError: result.error?.code === 'FEATURE_NOT_IMPLEMENTED',
+        };
     }
     async handleCollectiveValidate(args) {
         const readiness = await runtimeReadinessService.ensureReady('mcp_tool');
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { checkpoint_ids, validate_against_current_code = true, cwd } = args;
-        const result = await this.daemonFetch('/v1/collective/validate', {
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/collective/validate', {
             method: 'POST',
-            body: JSON.stringify({
-                workspace_id: cwd || process.cwd(),
-                checkpoint_ids: checkpoint_ids || [],
-                validate_against_current_code,
-            }),
+            body: JSON.stringify(args),
         });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
-        }
-        return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
+        return {
+            content: [{
+                    type: 'text',
+                    text: result.error?.code === 'FEATURE_NOT_IMPLEMENTED'
+                        ? 'Collective memory not yet implemented (Phase 6)'
+                        : JSON.stringify(result.data, null, 2),
+                }],
+            isError: result.error?.code === 'FEATURE_NOT_IMPLEMENTED',
+        };
     }
     async handleCollectiveConflicts(args) {
         const readiness = await runtimeReadinessService.ensureReady('mcp_tool');
         if (!readiness.ready) {
             return { content: [{ type: 'text', text: `Daemon not ready: ${readiness.state}` }], isError: true };
         }
-        const { cwd } = args;
-        const result = await this.daemonFetch('/v1/collective/conflicts', { useGet: true });
-        if (!result.ok) {
-            return { content: [{ type: 'text', text: `Failed: ${result.error}` }], isError: true };
-        }
-        return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
+        const result = await apiFetch(configService.getDaemonUrl(), '/v1/collective/conflicts', { method: 'GET' });
+        return {
+            content: [{
+                    type: 'text',
+                    text: result.error?.code === 'FEATURE_NOT_IMPLEMENTED'
+                        ? 'Collective memory not yet implemented (Phase 6)'
+                        : JSON.stringify(result.data, null, 2),
+                }],
+            isError: result.error?.code === 'FEATURE_NOT_IMPLEMENTED',
+        };
     }
 }
 export const toolHandlers = new ToolHandlers();

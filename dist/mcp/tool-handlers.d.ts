@@ -3,6 +3,7 @@
  * Each handler calls runtimeReadinessService.ensureReady("mcp_tool").
  * Health check uses GET /v1/health (not POST).
  * Daemon URL comes from configService.getDaemonUrl().
+ * All responses properly parse the ApiResponse<T> envelope.
  */
 import { getToolDefinitions, ToolDefinition } from './tool-definitions.js';
 export { getToolDefinitions, ToolDefinition };
@@ -31,7 +32,6 @@ export declare class ToolHandlers {
         }[];
         isError?: boolean;
     }>;
-    private daemonFetch;
     private handleBuildResumePack;
     private handleIngestEvent;
     private handleRecordOutcome;
