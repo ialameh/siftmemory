@@ -14,27 +14,60 @@
     "memory",
     "reasoning",
     "resumable",
-    "claude-code",
-    "ollama",
-    "rag"
+    "claude-code"
   ],
-  "skills": "./skills",
   "commands": "./commands",
   "mcpServers": {
     "siftmemory-memory": {
       "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"
-      ]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"]
     }
   },
-  "hooks": "./hooks/hooks.json",
-  "hooksConfig": {
-    "siftmemory": {
-      "daemonUrl": "http://127.0.0.1:7777",
-      "autoStartDaemon": true,
-      "startupTimeoutMs": 5000,
-      "healthCacheTtlMs": 30000
-    }
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Write|Edit|Bash|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/record-event.mjs",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact/inject-resume.mjs",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/spawn-daemon.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/record-outcome.mjs",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
   }
 }
