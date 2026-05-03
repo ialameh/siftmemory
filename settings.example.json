@@ -1,0 +1,23 @@
+{
+  "siftmemory.daemonUrl": "http://127.0.0.1:7777",
+  "siftmemory.autoStartDaemon": true,
+  "siftmemory.startupTimeoutMs": 5000,
+  "siftmemory.activeHeartbeatIntervalMs": 30000,
+  "siftmemory.idleHeartbeatIntervalMs": 120000,
+  "siftmemory.maxHeartbeatFailures": 2,
+  "siftmemory.maxRestartAttempts": 3,
+  "siftmemory.healthCacheTtlMs": 30000,
+  "siftmemory.notifyCoreMissing": true,
+  "siftmemory.notifyDaemonDown": true,
+  "siftmemory.disableWhenCoreMissing": true,
+  "siftmemory.daemonPath": null,
+  "siftmemory.cliPath": null,
+  "siftmemory.releaseUrl": "https://github.com/ialameh/sift-memory/releases",
+  "siftmemory.injectOnSessionStart": true,
+  "siftmemory.injectOnUserPrompt": true,
+  "siftmemory.captureToolEvents": true,
+  "siftmemory.captureFailures": true,
+  "siftmemory.extractBeforeCompact": true,
+  "siftmemory.recordOutcomesOnStop": true,
+  "siftmemory.strictHookFailures": false
+}

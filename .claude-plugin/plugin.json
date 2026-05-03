@@ -1,0 +1,40 @@
+{
+  "name": "siftmemory",
+  "version": "0.1.0",
+  "description": "SiftMemory - resumable reasoning memory for Claude Code",
+  "author": {
+    "name": "Sam Alameh",
+    "email": "issam@alameh.com",
+    "url": "https://github.com/ialameh"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ialameh/siftmemory",
+  "repository": "https://github.com/ialameh/siftmemory",
+  "keywords": [
+    "memory",
+    "reasoning",
+    "resumable",
+    "claude-code",
+    "ollama",
+    "rag"
+  ],
+  "skills": "./skills",
+  "commands": "./commands",
+  "mcpServers": {
+    "siftmemory-memory": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"
+      ]
+    }
+  },
+  "hooks": "./hooks/hooks.json",
+  "hooksConfig": {
+    "siftmemory": {
+      "daemonUrl": "http://127.0.0.1:7777",
+      "autoStartDaemon": true,
+      "startupTimeoutMs": 5000,
+      "healthCacheTtlMs": 30000
+    }
+  }
+}

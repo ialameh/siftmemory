@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "siftmemory-marketplace",
+  "description": "SiftMemory - resumable reasoning memory for Claude Code",
+  "owner": {
+    "name": "Sam Alameh",
+    "email": "issam@alameh.com"
+  },
+  "plugins": [
+    {
+      "name": "siftmemory",
+      "description": "SiftMemory - resumable reasoning memory for Claude Code. Captures development events, extracts reasoning checkpoints, validates them against current code state, and builds compact Reasoning Resume Packs.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Sam Alameh",
+        "email": "issam@alameh.com"
+      },
+      "source": "./",
+      "category": "development",
+      "homepage": "https://github.com/ialameh/siftmemory"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "name": "siftmemory",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SiftMemory - resumable reasoning memory for Claude Code",
+  "main": "dist/plugin.js",
+  "types": "dist/plugin.d.ts",
+  "bin": {
+    "siftmemory": "bin/siftmemory.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "hooks",
+    "commands",
+    "scripts",
+    ".claude-plugin",
+    ".mcp.json",
+    "settings.example.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "memory",
+    "reasoning",
+    "resumable"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ialameh/siftmemory",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ialameh/siftmemory.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ialameh/siftmemory/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.6.0",
+    "toml": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
