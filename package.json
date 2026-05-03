@@ -15,6 +15,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "postinstall": "npm run build"
   },

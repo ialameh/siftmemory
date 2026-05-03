@@ -1,0 +1,12 @@
+local/
+cache/
+raw/
+imports/
+exports/private/
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+*.lock
+*.tmp
