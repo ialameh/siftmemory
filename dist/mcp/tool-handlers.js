@@ -18,6 +18,11 @@ export class ToolHandlers {
         this.handlers.set('siftmemory_context_inject', this.handleContextInject.bind(this));
         this.handlers.set('siftmemory_stats', this.handleStats.bind(this));
         this.handlers.set('siftmemory_health', this.handleHealth.bind(this));
+        this.handlers.set('siftmemory_collective_status', this.handleCollectiveStatus.bind(this));
+        this.handlers.set('siftmemory_collective_import', this.handleCollectiveImport.bind(this));
+        this.handlers.set('siftmemory_collective_promote', this.handleCollectivePromote.bind(this));
+        this.handlers.set('siftmemory_collective_validate', this.handleCollectiveValidate.bind(this));
+        this.handlers.set('siftmemory_collective_conflicts', this.handleCollectiveConflicts.bind(this));
     }
     async handle(request) {
         const handler = this.handlers.get(request.params.name);
@@ -290,6 +295,91 @@ export class ToolHandlers {
                     text: JSON.stringify(data, null, 2),
                 },
             ],
+        };
+    }
+    async handleCollectiveStatus(args) {
+        const { cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/collective/status`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to get collective status: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleCollectiveImport(args) {
+        const { cwd, validate_after_import = true } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/collective/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                workspace_id: cwd || process.cwd(),
+                validate_after_import,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to import collective memory: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleCollectivePromote(args) {
+        const { checkpoint_id, cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/collective/promote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                workspace_id: cwd || process.cwd(),
+                checkpoint_id,
+                promotion_mode: 'manual',
+                target: 'repo_collective',
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to promote checkpoint: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleCollectiveValidate(args) {
+        const { checkpoint_ids, validate_against_current_code = true, cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/collective/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                workspace_id: cwd || process.cwd(),
+                checkpoint_ids: checkpoint_ids || [],
+                validate_against_current_code,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to validate collective memory: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleCollectiveConflicts(args) {
+        const { cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/collective/conflicts`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to get collective conflicts: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
         };
     }
 }

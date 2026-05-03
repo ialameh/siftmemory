@@ -9,8 +9,9 @@
 - **Local-First Privacy**: All data stays on your machine
 - **Reasoning Resume Packs**: Compact context injection before compaction
 - **12 Lifecycle Hooks**: Captures events at the right moments
-- **8 Slash Commands**: Full control over memory operations
+- **17 Slash Commands**: Full control over memory and team operations
 - **MCP Server**: High-level operations via Model Context Protocol
+- **Team Collective Memory**: Share validated reasoning across your team via Git
 
 ## Installation
 
@@ -32,6 +33,8 @@ Or use a pre-built binary from [GitHub Releases](https://github.com/ialameh/sift
 
 ## Commands
 
+### Basic Commands
+
 | Command | Description |
 |---------|-------------|
 | `/siftmemory:check` | Quick status check - daemon health and plugin state |
@@ -43,6 +46,21 @@ Or use a pre-built binary from [GitHub Releases](https://github.com/ialameh/sift
 | `/siftmemory:forget` | Remove specific checkpoints from memory |
 | `/siftmemory:audit` | Review checkpoint validity and sources |
 | `/siftmemory:doctor` | Run diagnostics on installation |
+
+### Team Commands
+
+| Command | Description |
+|---------|-------------|
+| `/siftmemory:team status` | Show team collective memory status |
+| `/siftmemory:team pull` | Pull and import team memory from repository |
+| `/siftmemory:team import` | Import team collective memory into local database |
+| `/siftmemory:team promote <id>` | Promote local checkpoint to team memory |
+| `/siftmemory:team review` | View pending team memory reviews |
+| `/siftmemory:team approve <id>` | Approve a checkpoint for team use |
+| `/siftmemory:team reject <id>` | Reject a checkpoint from team use |
+| `/siftmemory:team conflicts` | View unresolved team claim conflicts |
+| `/siftmemory:team tombstone <id>` | Permanently exclude from team memory |
+| `/siftmemory:team explain <id>` | Explain a checkpoint's state and history |
 
 ## Lifecycle Hooks
 
@@ -67,6 +85,8 @@ The plugin hooks into Claude Code lifecycle events:
 
 The plugin provides an MCP server (`siftmemory-memory`) with these tools:
 
+### Core Tools
+
 | Tool | Description |
 |------|-------------|
 | `siftmemory_build_resume_pack` | Build Reasoning Resume Pack for current context |
@@ -79,6 +99,81 @@ The plugin provides an MCP server (`siftmemory-memory`) with these tools:
 | `siftmemory_checkpoint_*` | CRUD operations on checkpoints |
 | `siftmemory_stats` | Get memory statistics |
 | `siftmemory_health` | Check daemon health |
+
+### Team Collective Tools
+
+| Tool | Description |
+|------|-------------|
+| `siftmemory_collective_status` | Get team collective memory status |
+| `siftmemory_collective_import` | Import team memory from repository |
+| `siftmemory_collective_promote` | Promote local checkpoint to team memory |
+| `siftmemory_collective_validate` | Validate team claims against current code |
+| `siftmemory_collective_conflicts` | Get unresolved team claim conflicts |
+
+## Team Collective Memory
+
+SiftMemory supports **Git-tracked team collective memory** for sharing validated reasoning across a team.
+
+### Storage Model
+
+```
+repo/.siftmemory/collective/*.ndjson  = Git-tracked shared team memory source
+~/.siftmemory/workspaces/{key}/siftmemory.db  = Local private runtime database
+```
+
+### What Gets Committed
+
+The following files are designed to be committed to Git:
+
+```
+.siftmemory/collective/checkpoints.ndjson
+.siftmemory/collective/claims.ndjson
+.siftmemory/collective/evidence_refs.ndjson
+.siftmemory/collective/uncertainties.ndjson
+.siftmemory/collective/conflicts.ndjson
+.siftmemory/collective/qa_reviews.ndjson
+.siftmemory/collective/tombstones.ndjson
+.siftmemory/collective/manifest.json
+.siftmemory/collective/sync_state.json
+.siftmemory/policy/*.yaml
+```
+
+### What Stays Local (Never Commit)
+
+```
+.siftmemory/*.db
+.siftmemory/local/
+.siftmemory/cache/
+.siftmemory/raw/
+.siftmemory/imports/
+.siftmemory/exports/private/
+```
+
+### Trust Levels
+
+| Level | Description |
+|-------|-------------|
+| `private` | Created locally, only visible to you |
+| `collective_imported` | Imported from team collective files |
+| `collective_validated` | Imported and validated against local code |
+| `qa_reviewed` | Reviewed and approved by human |
+| `disputed` | Conflicts with another active claim |
+| `tombstoned` | Permanently excluded from injection |
+
+### Team Workflow
+
+```
+1. Developer runs /siftmemory:team promote cp_123
+2. Daemon applies privacy redaction (removes raw events, prompts, payloads)
+3. Evidence converted to pointers/hashes
+4. Policy check validates confidence level
+5. Redacted records written to repo/.siftmemory/collective/
+6. Developer commits to Git
+7. Team pulls changes
+8. Team members run /siftmemory:team import
+9. Claims validated against local code
+10. Eligible team claims available in resume packs
+```
 
 ## Settings
 
@@ -130,8 +225,8 @@ Configure via Claude Code settings (`~/.claude/settings.json`):
 ```
 Claude Code
     ├── Lifecycle Hooks (12 hooks)
-    ├── Slash Commands (8 commands)
-    └── MCP Server (10+ tools)
+    ├── Slash Commands (17 commands)
+    └── MCP Server (15+ tools)
             │
             ▼
     SiftMemory Daemon (http://127.0.0.1:7777)
@@ -140,7 +235,8 @@ Claude Code
             ├── Checkpoint Extraction
             ├── Invalidation Engine
             ├── Retrieval & Scoring
-            └── Resume Pack Builder
+            ├── Resume Pack Builder
+            └── Team Collective Memory
             │
             ▼
     SQLite Database (~/.siftmemory/workspaces/{workspace_key}/)
@@ -148,10 +244,18 @@ Claude Code
 
 ## Data Storage
 
+### Local Private (Never Commit)
+
 - **Global config**: `~/.siftmemory/config.yaml`
 - **Workspace configs**: `~/.siftmemory/workspaces/{workspace_key}/workspace.yaml`
 - **Database**: `~/.siftmemory/workspaces/{workspace_key}/siftmemory.db`
 - **Runtime state**: `~/.siftmemory/run/`
+
+### Repo Collective (Commit to Git)
+
+- **Team memory source**: `{repo}/.siftmemory/collective/*.ndjson`
+- **Policies**: `{repo}/.siftmemory/policy/*.yaml`
+- **Manifest**: `{repo}/.siftmemory/collective/manifest.json`
 
 ## Troubleshooting
 
@@ -176,6 +280,13 @@ Or manually:
 ### View detailed logs
 
 Check `~/.siftmemory/run/` for session logs and event buffers.
+
+### Team memory not showing
+
+```bash
+/siftmemory:team status    # Check collective folder exists
+/siftmemory:team import     # Import team memory from repo
+```
 
 ## License
 

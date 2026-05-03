@@ -297,6 +297,91 @@ export const TOOL_DEFINITIONS = [
             properties: {},
         },
     },
+    {
+        name: 'siftmemory_collective_status',
+        description: 'Get team collective memory status for current repository',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory for repo resolution',
+                },
+            },
+        },
+    },
+    {
+        name: 'siftmemory_collective_import',
+        description: 'Import team collective memory from repository into local database',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory for repo resolution',
+                },
+                validate_after_import: {
+                    type: 'boolean',
+                    description: 'Validate imported claims against current code',
+                    default: true,
+                },
+            },
+        },
+    },
+    {
+        name: 'siftmemory_collective_promote',
+        description: 'Promote a local checkpoint to team collective memory',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                checkpoint_id: {
+                    type: 'string',
+                    description: 'Checkpoint ID to promote',
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory for repo resolution',
+                },
+            },
+            required: ['checkpoint_id'],
+        },
+    },
+    {
+        name: 'siftmemory_collective_validate',
+        description: 'Validate team collective claims against current codebase',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                checkpoint_ids: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Checkpoint IDs to validate',
+                },
+                validate_against_current_code: {
+                    type: 'boolean',
+                    description: 'Validate claims against current code facts',
+                    default: true,
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory for repo resolution',
+                },
+            },
+        },
+    },
+    {
+        name: 'siftmemory_collective_conflicts',
+        description: 'Get unresolved team claim conflicts',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory for repo resolution',
+                },
+            },
+        },
+    },
 ];
 export function getToolDefinitions() {
     return TOOL_DEFINITIONS;

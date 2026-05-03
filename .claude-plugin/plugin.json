@@ -1,6 +1,6 @@
 {
   "name": "siftmemory",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Claude Code bridge for SiftMemory resumable reasoning memory.",
   "author": {
     "name": "Sam Alameh",
