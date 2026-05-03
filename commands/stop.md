@@ -1,6 +1,8 @@
 ---
 description: Stop the SiftMemory daemon
 allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" stop "$ARGUMENTS"
 ---
 
 # /siftmemory:stop

@@ -1,6 +1,8 @@
 ---
 description: Show detailed SiftMemory runtime status
 allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" status "$ARGUMENTS"
 ---
 
 # /siftmemory:status

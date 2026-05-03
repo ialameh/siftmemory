@@ -1,3 +1,10 @@
+---
+description: Remove specific memories or clear SiftMemory data
+allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" forget "$ARGUMENTS"
+---
+
 # /siftmemory:forget
 
 Remove specific memories or clear SiftMemory data.

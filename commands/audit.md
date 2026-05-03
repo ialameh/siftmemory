@@ -1,3 +1,10 @@
+---
+description: Audit SiftMemory memory and checkpoint validity
+allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" audit "$ARGUMENTS"
+---
+
 # /siftmemory:audit
 
 Audit SiftMemory memory and checkpoint validity.

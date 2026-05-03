@@ -14,13 +14,15 @@
  * Input: Claude hook JSON is read from stdin. Env vars used as fallback.
  */
 /**
- * Generate a stable client_event_id from session_id + hook_event_name + tool_use_id + event_type
- * This replaces Date.now() based IDs with deterministic ones.
+ * Build an IngestEventRequest compatible object for the daemon.
+ * This ensures the correct contract with workspace_id top-level,
+ * and sanitizer-specific fields inside payload_json.
  */
-export declare function generateClientEventId(params: {
+export declare function buildIngestEventRequest(params: {
+    sanitized: Record<string, unknown>;
+    workspaceId: string;
     sessionId: string;
-    hookEventName: string;
-    toolUseId?: string;
+    hookName: string;
     eventType: string;
-}): string;
+}): Record<string, unknown>;
 //# sourceMappingURL=siftmemory-hook.d.ts.map

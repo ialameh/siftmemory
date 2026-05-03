@@ -44,23 +44,67 @@ interface HookInput {
 }
 
 /**
- * Generate a stable client_event_id from session_id + hook_event_name + tool_use_id + event_type
- * This replaces Date.now() based IDs with deterministic ones.
+ * Build an IngestEventRequest compatible object for the daemon.
+ * This ensures the correct contract with workspace_id top-level,
+ * and sanitizer-specific fields inside payload_json.
  */
-export function generateClientEventId(params: {
+export function buildIngestEventRequest(params: {
+  sanitized: Record<string, unknown>;
+  workspaceId: string;
   sessionId: string;
-  hookEventName: string;
-  toolUseId?: string;
+  hookName: string;
   eventType: string;
-}): string {
-  const input = [
-    params.sessionId,
-    params.hookEventName,
-    params.toolUseId || '',
-    params.eventType,
-  ].join('|');
+}): Record<string, unknown> {
+  const {
+    sanitized,
+    workspaceId,
+    sessionId,
+    hookName,
+    eventType,
+  } = params;
 
-  return createHash('sha256').update(input).digest('hex').slice(0, 16);
+  // Extract tool name from sanitized or default
+  const tool = sanitized.tool_name as string | undefined
+    || sanitized.tool as string | undefined
+    || '';
+
+  // Extract file_path if present
+  const file_path = sanitized.file_path as string | undefined;
+
+  // Build payload_json from sanitizer-specific fields only
+  const payload_json: Record<string, unknown> = {};
+  const topLevelExcludes = [
+    'workspace_id', 'session_id', 'client_event_id', 'timestamp',
+    'event_type', 'actor', 'tool', 'file_path', 'symbol_refs',
+    'privacy_level', 'old_string_hash', 'new_string_hash',
+    'command', 'output_hash', 'pattern_hash',
+  ];
+
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (!topLevelExcludes.includes(key)) {
+      payload_json[key] = value;
+    }
+  }
+
+  // Generate stable client_event_id if not already present
+  let client_event_id = sanitized.client_event_id as string | undefined;
+  if (!client_event_id) {
+    const idInput = [sessionId, hookName, (sanitized.tool_use_id as string) || '', eventType].join('|');
+    client_event_id = createHash('sha256').update(idInput).digest('hex').slice(0, 16);
+  }
+
+  return {
+    workspace_id: workspaceId,
+    session_id: sessionId,
+    actor: 'Tool',
+    event_type: eventType,
+    tool,
+    file_path: file_path || null,
+    symbol_refs: [],
+    payload_json,
+    privacy_level: 'Private',
+    client_event_id: client_event_id,
+  };
 }
 
 /**
@@ -121,16 +165,37 @@ async function readHookInput(): Promise<HookInput> {
   });
 }
 
+function safeJsonParse(text: string, fallback: unknown = undefined): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+}
+
 function readFromEnvVars(): HookInput {
+  const toolEvent = safeJsonParse(process.env.SIFTMEMORY_TOOL_EVENT || '{}', {});
+  const userPromptEvent = safeJsonParse(process.env.SIFTMEMORY_USER_PROMPT_EVENT || '{}', {});
+
   return {
     hook_event_name: process.env.SIFTMEMORY_HOOK_EVENT_NAME || '',
     session_id: process.env.SIFTMEMORY_SESSION_ID || 'unknown',
     workspace_id: process.env.SIFTMEMORY_WORKSPACE_ID,
-    prompt: process.env.SIFTMEMORY_USER_PROMPT_EVENT ? JSON.parse(process.env.SIFTMEMORY_USER_PROMPT_EVENT).prompt : undefined,
-    tool_use_id: process.env.SIFTMEMORY_TOOL_EVENT ? JSON.parse(process.env.SIFTMEMORY_TOOL_EVENT).tool_use_id : undefined,
-    tool_name: process.env.SIFTMEMORY_TOOL_EVENT ? JSON.parse(process.env.SIFTMEMORY_TOOL_EVENT).tool_name : undefined,
-    tool_input: process.env.SIFTMEMORY_TOOL_EVENT ? JSON.parse(process.env.SIFTMEMORY_TOOL_EVENT).input : undefined,
-    tool_output: process.env.SIFTMEMORY_TOOL_EVENT ? JSON.parse(process.env.SIFTMEMORY_TOOL_EVENT).output : undefined,
+    prompt: typeof userPromptEvent === 'object' && userPromptEvent !== null
+      ? (userPromptEvent as Record<string, unknown>).prompt as string
+      : undefined,
+    tool_use_id: typeof toolEvent === 'object' && toolEvent !== null
+      ? (toolEvent as Record<string, unknown>).tool_use_id as string
+      : undefined,
+    tool_name: typeof toolEvent === 'object' && toolEvent !== null
+      ? (toolEvent as Record<string, unknown>).tool_name as string
+      : undefined,
+    tool_input: typeof toolEvent === 'object' && toolEvent !== null
+      ? (toolEvent as Record<string, unknown>).input as Record<string, unknown>
+      : undefined,
+    tool_output: typeof toolEvent === 'object' && toolEvent !== null
+      ? (toolEvent as Record<string, unknown>).output
+      : undefined,
     cwd: process.cwd(),
   };
 }
@@ -220,11 +285,15 @@ async function runHook(hookName: string, args: Record<string, string>): Promise<
         eventType
       );
 
-      sanitized.workspace_id = workspace.workspace_id;
-      (sanitized as Record<string, unknown>).session_id = sessionId;
-      (sanitized as Record<string, unknown>).tool_use_id = input.tool_use_id;
+      const ingestRequest = buildIngestEventRequest({
+        sanitized,
+        workspaceId: workspace.workspace_id,
+        sessionId: sessionId,
+        hookName: hookName,
+        eventType: eventType,
+      });
 
-      await bufferEvent(sanitized);
+      await bufferEvent(ingestRequest);
     } catch {
       // Fail silently
     }
@@ -251,12 +320,21 @@ async function runHook(hookName: string, args: Record<string, string>): Promise<
         eventType
       );
 
-      sanitized.workspace_id = workspace.workspace_id;
-      (sanitized as Record<string, unknown>).session_id = sessionId;
-      (sanitized as Record<string, unknown>).tool_use_id = input.tool_use_id;
-      (sanitized as Record<string, unknown>).error = input.error;
+      // For failures, add error info to a copy
+      const sanitizedWithError = {
+        ...sanitized,
+        error: input.error,
+      };
 
-      await bufferEvent(sanitized);
+      const ingestRequest = buildIngestEventRequest({
+        sanitized: sanitizedWithError,
+        workspaceId: workspace.workspace_id,
+        sessionId: sessionId,
+        hookName: hookName,
+        eventType: eventType,
+      });
+
+      await bufferEvent(ingestRequest);
     } catch {
       // Fail silently
     }

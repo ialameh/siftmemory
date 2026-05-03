@@ -1,6 +1,8 @@
 ---
 description: Check SiftMemory daemon status and plugin state
 allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" check "$ARGUMENTS"
 ---
 
 # /siftmemory:check

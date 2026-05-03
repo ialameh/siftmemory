@@ -1,3 +1,10 @@
+---
+description: Team collective memory management
+allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" team "$ARGUMENTS"
+---
+
 # /siftmemory:team
 
 Team collective memory management for cross-repository reasoning.

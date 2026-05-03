@@ -1,6 +1,8 @@
 ---
 description: Start the SiftMemory daemon manually
 allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" start "$ARGUMENTS"
 ---
 
 # /siftmemory:start

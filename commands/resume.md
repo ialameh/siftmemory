@@ -1,3 +1,10 @@
+---
+description: Request a Reasoning Resume Pack
+allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" resume "$ARGUMENTS"
+---
+
 # /siftmemory:resume
 
 Request a Reasoning Resume Pack for the current task context.

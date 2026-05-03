@@ -1,3 +1,10 @@
+---
+description: Run diagnostics on SiftMemory installation
+allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" doctor "$ARGUMENTS"
+---
+
 # /siftmemory:doctor
 
 Run diagnostics on SiftMemory installation and configuration.

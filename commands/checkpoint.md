@@ -1,3 +1,10 @@
+---
+description: Create a reasoning checkpoint
+allowed-tools: Bash
+command: |
+  node "${CLAUDE_PLUGIN_ROOT}/dist/command-runner.js" checkpoint "$ARGUMENTS"
+---
+
 # /siftmemory:checkpoint
 
 Create a reasoning checkpoint to capture current understanding.
