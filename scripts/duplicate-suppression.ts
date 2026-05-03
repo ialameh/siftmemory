@@ -1,21 +1,19 @@
 /**
  * Duplicate Resume Pack Suppression
  * Prevents injecting the same resume pack twice in a session.
+ * Uses stable task hash to track actual prompt content.
  */
 
+import { createHash } from 'crypto';
 import { pluginStateStore } from './runtime/plugin-state.js';
 
-const DUPLICATE_WINDOW_MS = 60000; // 60 seconds
+const DUPLICATE_WINDOW_MS = 60000; // 60 seconds - but we track by resume_pack_id, not time
 
-interface ResumeInjectionRecord {
-  workspaceId: string;
-  sessionId: string;
-  resumePackId: string;
-  injectedAtMs: number;
-  taskHash: string;
+export function hashTask(prompt: string): string {
+  return createHash('sha256').update(prompt.toLowerCase().trim()).digest('hex').slice(0, 16);
 }
 
-export function shouldSuppressPrompt(prompt: string): boolean {
+export function isPromptTrivial(prompt: string): boolean {
   const normalized = prompt.toLowerCase().trim();
 
   // Skip trivial prompts
@@ -36,27 +34,10 @@ export function shouldSuppressPrompt(prompt: string): boolean {
   return false;
 }
 
-export function isPromptSpecific(prompt: string): boolean {
-  const codingSignals = [
-    'fix', 'implement', 'debug', 'refactor', 'test', 'deploy',
-    'compile', 'error', 'class', 'function', 'method', 'api',
-    'component', 'lwc', 'apex', 'typescript', 'rust', 'python',
-    'salesforce', 'auth', 'database', 'migration', 'architecture',
-    'add', 'remove', 'change', 'update', 'create', 'delete',
-  ];
-
-  const lower = prompt.toLowerCase();
-  return codingSignals.some(signal => lower.includes(signal));
-}
-
-export function hashTask(prompt: string): string {
-  const { createHash } = require('crypto');
-  return createHash('sha256').update(prompt.toLowerCase().trim()).digest('hex').slice(0, 16);
-}
-
 export async function checkDuplicateResume(
   workspaceId: string,
-  prompt: string
+  prompt: string,
+  resumePackId: string
 ): Promise<{ shouldSkip: boolean; resumePackId?: string }> {
   const state = await pluginStateStore.get();
   if (!state) {
@@ -64,33 +45,19 @@ export async function checkDuplicateResume(
   }
 
   const sessionId = process.env.SIFTMEMORY_SESSION_ID || 'unknown';
-  const now = Date.now();
   const taskHash = hashTask(prompt);
 
   // Get injection records
-  const records: ResumeInjectionRecord[] = state.session.resumeInjections || [];
+  const records = state.session.resumeInjections || [];
 
-  // Check for same resume pack injected in this session
-  const recentSameSession = records.find(r =>
+  // NEVER inject the same resume_pack_id twice in this session
+  const samePackInSession = records.find(r =>
     r.sessionId === sessionId &&
-    now - r.injectedAtMs < DUPLICATE_WINDOW_MS
+    r.resumePackId === resumePackId
   );
 
-  if (recentSameSession) {
-    return { shouldSkip: true, resumePackId: recentSameSession.resumePackId };
-  }
-
-  // If task is generic and we had a pack recently, skip
-  if (!isPromptSpecific(prompt)) {
-    const recentGeneric = records.find(r =>
-      r.workspaceId === workspaceId &&
-      r.sessionId === sessionId &&
-      now - r.injectedAtMs < DUPLICATE_WINDOW_MS
-    );
-
-    if (recentGeneric) {
-      return { shouldSkip: true };
-    }
+  if (samePackInSession) {
+    return { shouldSkip: true, resumePackId };
   }
 
   return { shouldSkip: false };
@@ -98,7 +65,8 @@ export async function checkDuplicateResume(
 
 export async function recordResumeInjection(
   workspaceId: string,
-  resumePackId: string
+  resumePackId: string,
+  taskHash: string
 ): Promise<void> {
   const state = await pluginStateStore.get();
   if (!state) {
@@ -106,18 +74,22 @@ export async function recordResumeInjection(
   }
 
   const sessionId = process.env.SIFTMEMORY_SESSION_ID || 'unknown';
-  const records: ResumeInjectionRecord[] = state.session.resumeInjections || [];
+  const records = state.session.resumeInjections || [];
 
   records.push({
     workspaceId,
     sessionId,
     resumePackId,
     injectedAtMs: Date.now(),
-    taskHash: hashTask(''),
+    taskHash,
   });
 
   // Keep only recent records (last 100)
   state.session.resumeInjections = records.slice(-100);
 
   await pluginStateStore.set(state);
+}
+
+export function extractPromptFromHookInput(input: { prompt?: string }): string {
+  return input?.prompt || '';
 }

@@ -13,6 +13,7 @@ export declare class NotificationService {
     notifyDaemonDown(reason: ReadinessReason): Promise<void>;
     notifyDaemonStartFailed(reason: ReadinessReason, error: string): Promise<void>;
     notifyDaemonStartTimedOut(reason: ReadinessReason): Promise<void>;
+    notifyPermanentlyDown(reason: ReadinessReason): Promise<void>;
     notifyReady(): Promise<void>;
     private getCoreMissingMessage;
     private getDaemonDownMessage;

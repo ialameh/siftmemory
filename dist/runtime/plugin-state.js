@@ -1,12 +1,20 @@
-import { writeFileSync, readFileSync, existsSync, renameSync, unlinkSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, renameSync, unlinkSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
-import { tmpdir } from 'os';
-const STATE_FILE = resolve(tmpdir(), 'siftmemory-plugin-state.json');
-const STATE_LOCK_FILE = resolve(tmpdir(), 'siftmemory-state.lock');
+import { homedir } from 'os';
+const SIFT_MEMORY_DIR = resolve(homedir(), '.siftmemory');
+const STATE_FILE = resolve(SIFT_MEMORY_DIR, 'claude-plugin-state.json');
+const STATE_LOCK_FILE = resolve(SIFT_MEMORY_DIR, 'claude-plugin-state.lock');
 const LOCK_TTL_MS = 5000;
+// Ensure ~/.siftmemory directory exists
+function ensureSiftMemoryDir() {
+    if (!existsSync(SIFT_MEMORY_DIR)) {
+        mkdirSync(SIFT_MEMORY_DIR, { recursive: true });
+    }
+}
 export class PluginStateStore {
     lockAcquiredAt = null;
     async get() {
+        ensureSiftMemoryDir();
         this.acquireLock();
         try {
             if (!existsSync(STATE_FILE)) {
@@ -45,6 +53,7 @@ export class PluginStateStore {
         }
     }
     acquireLock() {
+        ensureSiftMemoryDir();
         const deadline = Date.now() + LOCK_TTL_MS;
         while (existsSync(STATE_LOCK_FILE)) {
             if (Date.now() > deadline) {

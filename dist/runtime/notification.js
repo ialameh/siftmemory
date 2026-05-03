@@ -42,6 +42,17 @@ export class NotificationService {
         };
         this.emit(notification);
     }
+    async notifyPermanentlyDown(reason) {
+        const notification = {
+            type: 'error',
+            message: `SiftMemory daemon failed to start after ${3} attempts and is disabled for this session.
+
+To re-enable, restart Claude Code.`,
+            action: 'disable_integration',
+            timestamp: Date.now(),
+        };
+        this.emit(notification);
+    }
     async notifyReady() {
         // Silent - we don't notify on success
     }

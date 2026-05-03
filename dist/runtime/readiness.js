@@ -6,6 +6,8 @@ import { daemonStartLock } from './daemon-start-lock.js';
 import { notificationService } from './notification.js';
 import { pluginStateStore } from './plugin-state.js';
 const UNHEALTHY_THRESHOLD_MS = 60000;
+const RESTART_BACKOFF_MS = [1000, 3000, 10000]; // 1s, 3s, 10s
+const MAX_RESTART_ATTEMPTS = 3;
 export class RuntimeReadinessService {
     async ensureReady(reason) {
         const config = configService.config;
@@ -16,6 +18,10 @@ export class RuntimeReadinessService {
         const currentState = state?.runtime?.state || 'uninitialized';
         if (currentState === 'disabled_by_user') {
             return { ready: false, state: 'disabled_by_user', reason };
+        }
+        // Check if permanently down for session
+        if (state?.runtime?.permanentlyDownForSession) {
+            return { ready: false, state: 'permanently_down', reason };
         }
         switch (currentState) {
             case 'uninitialized':
@@ -49,7 +55,8 @@ export class RuntimeReadinessService {
                 };
             case 'ready':
             case 'degraded': {
-                const healthy = await daemonHealthClient.check('http://127.0.0.1:7777');
+                const daemonUrl = configService.getDaemonUrl();
+                const healthy = await daemonHealthClient.check(daemonUrl);
                 if (healthy.ok) {
                     return { ready: true, state: currentState, reason };
                 }
@@ -79,7 +86,8 @@ export class RuntimeReadinessService {
             await notificationService.notifyCoreMissing(reason);
             return { ready: false, state: 'core_missing', reason };
         }
-        const healthy = await daemonHealthClient.check('http://127.0.0.1:7777');
+        const daemonUrl = configService.getDaemonUrl();
+        const healthy = await daemonHealthClient.check(daemonUrl);
         if (healthy.ok) {
             await this.updateState('ready');
             await notificationService.notifyReady();
@@ -97,18 +105,33 @@ export class RuntimeReadinessService {
             await this.updateState('starting_daemon');
             return { ready: false, state: 'starting_daemon', reason };
         }
+        const state = await pluginStateStore.get();
+        const restartAttempts = state?.runtime?.restartAttemptsThisSession || 0;
+        // Check if we've exceeded max restart attempts
+        if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
+            daemonStartLock.release();
+            await this.updateState('permanently_down', state);
+            await notificationService.notifyPermanentlyDown(reason);
+            return { ready: false, state: 'permanently_down', reason };
+        }
+        // Apply backoff delay if this is a restart (not first attempt)
+        if (restartAttempts > 0) {
+            const backoffIndex = Math.min(restartAttempts - 1, RESTART_BACKOFF_MS.length - 1);
+            const delayMs = RESTART_BACKOFF_MS[backoffIndex];
+            await this.sleep(delayMs);
+        }
         try {
-            await this.updateState('starting_daemon');
+            await this.updateState('restarting');
             const binaryPath = await binaryResolver.findSiftMemoryBinary();
             if (!binaryPath) {
                 await this.updateState('core_missing');
                 await notificationService.notifyCoreMissing(reason);
                 return { ready: false, state: 'core_missing', reason };
             }
-            const startResult = await daemonSupervisor.startDaemon(binaryPath, 5000);
+            const startupTimeout = configService.getStartupTimeout();
+            const startResult = await daemonSupervisor.startDaemon(binaryPath, startupTimeout);
             if (!startResult.started) {
-                await this.updateState('daemon_down');
-                await notificationService.notifyDaemonStartFailed(reason, startResult.error || 'Unknown error');
+                await this.handleFailedStart(reason, startResult.error || 'Unknown error');
                 return {
                     ready: false,
                     state: 'daemon_down',
@@ -117,10 +140,10 @@ export class RuntimeReadinessService {
                     error: startResult.error,
                 };
             }
-            const healthy = await daemonHealthClient.waitUntilHealthy('http://127.0.0.1:7777', 5000);
+            const daemonUrl = configService.getDaemonUrl();
+            const healthy = await daemonHealthClient.waitUntilHealthy(daemonUrl, startupTimeout);
             if (!healthy.ok) {
-                await this.updateState('daemon_down');
-                await notificationService.notifyDaemonStartTimedOut(reason);
+                await this.handleFailedStart(reason, 'Health check timed out');
                 return {
                     ready: false,
                     state: 'daemon_down',
@@ -137,8 +160,31 @@ export class RuntimeReadinessService {
             daemonStartLock.release();
         }
     }
+    async handleFailedStart(reason, error) {
+        const state = await pluginStateStore.get();
+        const restartAttempts = (state?.runtime?.restartAttemptsThisSession || 0) + 1;
+        if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
+            await this.updateState('permanently_down', state);
+            await notificationService.notifyPermanentlyDown(reason);
+        }
+        else {
+            await this.updateState('daemon_down', state);
+            await this.incrementRestartAttempts(restartAttempts);
+            await notificationService.notifyDaemonStartFailed(reason, error);
+        }
+    }
+    async incrementRestartAttempts(count) {
+        const state = await pluginStateStore.get();
+        if (state) {
+            state.runtime.restartAttemptsThisSession = count;
+            await pluginStateStore.set(state);
+        }
+    }
     shouldAutoStart() {
         return configService.config.autoStartDaemon;
+    }
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
     async updateState(newState, existingState) {
         const state = existingState || {
@@ -147,19 +193,32 @@ export class RuntimeReadinessService {
                 lastHealthAttempt: null,
                 lastHealthy: null,
                 consecutiveFailures: 0,
+                restartAttemptsThisSession: 0,
+                permanentlyDownForSession: false,
             },
             session: {
                 hooksEnabled: false,
                 startTime: null,
                 workspaceId: process.cwd(),
+                resumeInjections: [],
+                cwdToWorkspace: {},
             },
             config: {
                 disabled: false,
+            },
+            notifications: {
+                coreMissingNotified: false,
+                daemonDownNotifiedAt: null,
+                midSessionFailureNotified: false,
+                permanentlyDownNotified: false,
             },
         };
         state.runtime.state = newState;
         if (newState === 'ready') {
             state.runtime.lastHealthy = Date.now();
+        }
+        if (newState === 'permanently_down') {
+            state.runtime.permanentlyDownForSession = true;
         }
         await pluginStateStore.set(state);
     }

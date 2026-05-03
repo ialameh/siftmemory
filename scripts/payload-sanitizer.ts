@@ -77,18 +77,25 @@ export function sanitizeToolPayload(
     tool_output?: unknown;
     session_id?: string;
     tool_use_id?: string;
+    hook_event_name?: string;
   },
   eventType: string
 ): Record<string, unknown> {
   const toolName = event.tool_name || '';
   const input = event.tool_input || {};
 
+  // Generate stable client_event_id from session_id + hook_event_name + tool_use_id + event_type
+  const clientEventIdInput = [
+    event.session_id || 'unknown',
+    event.hook_event_name || 'unknown',
+    event.tool_use_id || 'unknown',
+    eventType,
+  ].join('|');
+
   // Base sanitized event
   const sanitized: Record<string, unknown> = {
     session_id: event.session_id || process.env.SIFTMEMORY_SESSION_ID || 'unknown',
-    client_event_id: hashString(
-      `${event.session_id || 'unknown'}_${eventType}_${event.tool_use_id || 'unknown'}_${Date.now()}`
-    ),
+    client_event_id: hashString(clientEventIdInput),
     timestamp: new Date().toISOString(),
   };
 

@@ -1,3 +1,7 @@
+/**
+ * SiftMemory MCP Tool Definitions
+ * Type definitions for MCP tools.
+ */
 export const TOOL_DEFINITIONS = [
     {
         name: 'siftmemory_build_resume_pack',

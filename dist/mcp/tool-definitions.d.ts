@@ -1,3 +1,7 @@
+/**
+ * SiftMemory MCP Tool Definitions
+ * Type definitions for MCP tools.
+ */
 export interface ToolDefinition {
     name: string;
     description: string;

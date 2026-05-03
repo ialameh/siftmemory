@@ -15,15 +15,32 @@ export interface PluginState {
         lastHealthAttempt: number | null;
         lastHealthy: number | null;
         consecutiveFailures: number;
+        restartAttemptsThisSession: number;
+        permanentlyDownForSession: boolean;
     };
     session: {
         hooksEnabled: boolean;
         startTime: number | null;
         workspaceId: string;
+        resumeInjections: ResumeInjectionRecord[];
+        cwdToWorkspace: Record<string, string>;
     };
     config: {
         disabled: boolean;
     };
+    notifications: {
+        coreMissingNotified: boolean;
+        daemonDownNotifiedAt: number | null;
+        midSessionFailureNotified: boolean;
+        permanentlyDownNotified: boolean;
+    };
+}
+export interface ResumeInjectionRecord {
+    workspaceId: string;
+    sessionId: string;
+    resumePackId: string;
+    injectedAtMs: number;
+    taskHash: string;
 }
 export interface BinaryResolution {
     daemonPath: string | null;
