@@ -1,5 +1,175 @@
 export const TOOL_DEFINITIONS = [
     {
+        name: 'siftmemory_build_resume_pack',
+        description: 'Build a Reasoning Resume Pack for the current workspace and task context',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: {
+                    type: 'string',
+                    enum: ['recent', 'session', 'workspace'],
+                    description: 'Context scope (default: recent)',
+                    default: 'recent',
+                },
+                limit: {
+                    type: 'number',
+                    description: 'Maximum checkpoints to include (default: 5)',
+                    default: 5,
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory for workspace resolution',
+                },
+            },
+        },
+    },
+    {
+        name: 'siftmemory_ingest_event',
+        description: 'Ingest a development event into SiftMemory',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                event_type: {
+                    type: 'string',
+                    description: 'Type of event',
+                },
+                tool_name: {
+                    type: 'string',
+                    description: 'Name of tool used',
+                },
+                input: {
+                    type: 'object',
+                    description: 'Tool input data',
+                },
+                output: {
+                    type: 'object',
+                    description: 'Tool output data',
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory',
+                },
+            },
+        },
+    },
+    {
+        name: 'siftmemory_record_outcome',
+        description: 'Record the outcome of a Claude session',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                outcome: {
+                    type: 'string',
+                    enum: ['success', 'partial', 'failed'],
+                    description: 'Session outcome',
+                },
+                summary: {
+                    type: 'string',
+                    description: 'Brief summary of what was accomplished',
+                },
+                checkpoint_ids: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Checkpoints used in this session',
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory',
+                },
+            },
+            required: ['outcome'],
+        },
+    },
+    {
+        name: 'siftmemory_extract_checkpoint',
+        description: 'Extract reasoning checkpoint from recent events',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                claim: {
+                    type: 'string',
+                    description: 'The main claim or conclusion',
+                },
+                evidence: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Evidence supporting the claim',
+                },
+                uncertainty: {
+                    type: 'string',
+                    description: 'Known limitations or uncertainties',
+                },
+                invalidation_rule: {
+                    type: 'string',
+                    description: 'Condition that would invalidate this claim',
+                },
+                tags: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Tags for categorization',
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory',
+                },
+            },
+            required: ['claim'],
+        },
+    },
+    {
+        name: 'siftmemory_inspect_memory',
+        description: 'Inspect SiftMemory memory state and checkpoint validity',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: {
+                    type: 'string',
+                    enum: ['session', 'workspace', 'all'],
+                    description: 'Scope to inspect (default: workspace)',
+                    default: 'workspace',
+                },
+                include_invalid: {
+                    type: 'boolean',
+                    description: 'Include invalidated checkpoints',
+                    default: false,
+                },
+                format: {
+                    type: 'string',
+                    enum: ['summary', 'detailed', 'json'],
+                    description: 'Output format',
+                    default: 'summary',
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory',
+                },
+            },
+        },
+    },
+    {
+        name: 'siftmemory_suppress_memory',
+        description: 'Suppress or exclude specific checkpoints from resume packs',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                checkpoint_ids: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Checkpoint IDs to suppress',
+                },
+                reason: {
+                    type: 'string',
+                    description: 'Reason for suppression',
+                },
+                cwd: {
+                    type: 'string',
+                    description: 'Working directory',
+                },
+            },
+            required: ['checkpoint_ids'],
+        },
+    },
+    {
         name: 'siftmemory_search',
         description: 'Search SiftMemory reasoning checkpoints and claims for relevant context',
         inputSchema: {

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * SiftMemory PostToolUse Hook - Record tool events to daemon
+ * SiftMemory PostToolFailure Hook - Record failed tool use events
  */
 
-import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,11 +12,19 @@ const EVENT_BUF_FILE = join(PID_DIR, 'event-buffer.jsonl');
 
 function main() {
   const eventJson = process.env.SIFTMEMORY_TOOL_EVENT || '{}';
+  const sockFile = join(PID_DIR, 'daemon.sock');
+
+  if (!existsSync(sockFile)) {
+    process.exit(0);
+  }
 
   try {
     const event = JSON.parse(eventJson);
-    // Write event to buffer file for daemon to pick up
-    writeFileSync(EVENT_BUF_FILE, JSON.stringify(event) + '\n', { flag: 'a' });
+    appendFileSync(EVENT_BUF_FILE, JSON.stringify({
+      ...event,
+      event_type: 'post_tool_failure',
+      timestamp: new Date().toISOString()
+    }) + '\n');
   } catch (e) {
     // silently ignore parse errors
   }

@@ -5,6 +5,12 @@ export class ToolHandlers {
         this.registerHandlers();
     }
     registerHandlers() {
+        this.handlers.set('siftmemory_build_resume_pack', this.handleBuildResumePack.bind(this));
+        this.handlers.set('siftmemory_ingest_event', this.handleIngestEvent.bind(this));
+        this.handlers.set('siftmemory_record_outcome', this.handleRecordOutcome.bind(this));
+        this.handlers.set('siftmemory_extract_checkpoint', this.handleExtractCheckpoint.bind(this));
+        this.handlers.set('siftmemory_inspect_memory', this.handleInspectMemory.bind(this));
+        this.handlers.set('siftmemory_suppress_memory', this.handleSuppressMemory.bind(this));
         this.handlers.set('siftmemory_search', this.handleSearch.bind(this));
         this.handlers.set('siftmemory_checkpoint_create', this.handleCheckpointCreate.bind(this));
         this.handlers.set('siftmemory_checkpoint_get', this.handleCheckpointGet.bind(this));
@@ -42,9 +48,99 @@ export class ToolHandlers {
             };
         }
     }
+    async handleBuildResumePack(args) {
+        const { scope = 'recent', limit = 5, cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/resume/build`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspace_id: cwd || process.cwd(), scope, limit }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to build resume pack: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleIngestEvent(args) {
+        const { event_type, tool_name, input, output, cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event_type, tool_name, input, output, workspace_id: cwd || process.cwd() }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to ingest event: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleRecordOutcome(args) {
+        const { outcome, summary, checkpoint_ids, cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/outcomes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ outcome, summary, checkpoint_ids, workspace_id: cwd || process.cwd() }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to record outcome: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleExtractCheckpoint(args) {
+        const { claim, evidence, uncertainty, invalidation_rule, tags, cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/checkpoints/extract`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ claim, evidence: evidence || [], uncertainty, invalidation_rule, tags: tags || [], workspace_id: cwd || process.cwd() }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to extract checkpoint: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleInspectMemory(args) {
+        const { scope = 'workspace', include_invalid = false, format = 'summary', cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/retrieval/candidates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspace_id: cwd || process.cwd(), scope, include_invalid, format }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to inspect memory: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
+    async handleSuppressMemory(args) {
+        const { checkpoint_ids, reason, cwd } = args;
+        const response = await fetch(`${DAEMON_URL}/v1/checkpoints/suppress`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ checkpoint_ids, reason, workspace_id: cwd || process.cwd() }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to suppress memory: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        };
+    }
     async handleSearch(args) {
         const { query, limit = 5 } = args;
-        const response = await fetch(`${DAEMON_URL}/api/search`, {
+        const response = await fetch(`${DAEMON_URL}/v1/retrieval/candidates`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query, limit }),
@@ -64,7 +160,7 @@ export class ToolHandlers {
     }
     async handleCheckpointCreate(args) {
         const { claim, evidence = [], uncertainty, invalidation_rule, tags = [] } = args;
-        const response = await fetch(`${DAEMON_URL}/api/checkpoints`, {
+        const response = await fetch(`${DAEMON_URL}/v1/checkpoints/extract`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -84,14 +180,14 @@ export class ToolHandlers {
             content: [
                 {
                     type: 'text',
-                    text: `Created checkpoint: ${data.id}`,
+                    text: `Created checkpoint: ${JSON.stringify(data)}`,
                 },
             ],
         };
     }
     async handleCheckpointGet(args) {
         const { id } = args;
-        const response = await fetch(`${DAEMON_URL}/api/checkpoints/${id}`);
+        const response = await fetch(`${DAEMON_URL}/v1/checkpoints/${id}`);
         if (!response.ok) {
             throw new Error(`Checkpoint not found: ${id}`);
         }
@@ -116,7 +212,7 @@ export class ToolHandlers {
             params.set('status', String(status));
         params.set('limit', String(limit));
         params.set('workspace_id', process.cwd());
-        const response = await fetch(`${DAEMON_URL}/api/checkpoints?${params}`);
+        const response = await fetch(`${DAEMON_URL}/v1/checkpoints?${params}`);
         if (!response.ok) {
             throw new Error(`Failed to list checkpoints: ${response.statusText}`);
         }
@@ -132,7 +228,7 @@ export class ToolHandlers {
     }
     async handleContextInject(args) {
         const { scope = 'recent', limit = 5 } = args;
-        const response = await fetch(`${DAEMON_URL}/api/resume-pack`, {
+        const response = await fetch(`${DAEMON_URL}/v1/resume/build`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -155,7 +251,7 @@ export class ToolHandlers {
         };
     }
     async handleStats(_args) {
-        const response = await fetch(`${DAEMON_URL}/api/stats`);
+        const response = await fetch(`${DAEMON_URL}/v1/stats`);
         if (!response.ok) {
             throw new Error(`Failed to get stats: ${response.statusText}`);
         }
@@ -170,7 +266,11 @@ export class ToolHandlers {
         };
     }
     async handleHealth(_args) {
-        const response = await fetch(`${DAEMON_URL}/health`);
+        const response = await fetch(`${DAEMON_URL}/v1/health`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
         if (!response.ok) {
             return {
                 content: [

@@ -1,7 +1,7 @@
 {
   "name": "siftmemory",
-  "version": "0.1.1",
-  "description": "SiftMemory - resumable reasoning memory for Claude Code",
+  "version": "0.1.2",
+  "description": "Claude Code bridge for SiftMemory resumable reasoning memory.",
   "author": {
     "name": "Sam Alameh",
     "email": "issam@alameh.com",
@@ -16,11 +16,114 @@
     "resumable",
     "claude-code"
   ],
+  "hooks": "./hooks/hooks.json",
   "commands": "./commands",
-  "mcpServers": {
-    "siftmemory-memory": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"]
+  "mcpServers": "./.mcp.json",
+  "settings": {
+    "siftmemory.daemonUrl": {
+      "type": "string",
+      "default": "http://127.0.0.1:7777",
+      "description": "SiftMemory daemon URL."
+    },
+    "siftmemory.autoStartDaemon": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically start the SiftMemory daemon if installed but not running."
+    },
+    "siftmemory.startupTimeoutMs": {
+      "type": "number",
+      "default": 5000,
+      "description": "Maximum time to wait for daemon startup."
+    },
+    "siftmemory.activeHeartbeatIntervalMs": {
+      "type": "number",
+      "default": 30000,
+      "description": "Heartbeat interval while Claude session is active."
+    },
+    "siftmemory.idleHeartbeatIntervalMs": {
+      "type": "number",
+      "default": 120000,
+      "description": "Heartbeat interval while Claude session is idle."
+    },
+    "siftmemory.maxHeartbeatFailures": {
+      "type": "number",
+      "default": 2,
+      "description": "Consecutive heartbeat failures before marking daemon down."
+    },
+    "siftmemory.maxRestartAttempts": {
+      "type": "number",
+      "default": 3,
+      "description": "Maximum daemon restart attempts per Claude session."
+    },
+    "siftmemory.healthCacheTtlMs": {
+      "type": "number",
+      "default": 30000,
+      "description": "How long a successful health check can be reused."
+    },
+    "siftmemory.notifyCoreMissing": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show notification when SiftMemory core is not installed."
+    },
+    "siftmemory.notifyDaemonDown": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show notification when daemon is unavailable."
+    },
+    "siftmemory.disableWhenCoreMissing": {
+      "type": "boolean",
+      "default": true,
+      "description": "Disable SiftMemory operations when core binaries are missing."
+    },
+    "siftmemory.daemonPath": {
+      "type": "string",
+      "default": null,
+      "description": "Explicit path to siftmemory-daemon."
+    },
+    "siftmemory.cliPath": {
+      "type": "string",
+      "default": null,
+      "description": "Explicit path to siftmemory-cli."
+    },
+    "siftmemory.releaseUrl": {
+      "type": "string",
+      "default": "https://github.com/ialameh/sift-memory/releases",
+      "description": "Release URL shown when core is missing."
+    },
+    "siftmemory.injectOnSessionStart": {
+      "type": "boolean",
+      "default": true,
+      "description": "Inject minimal resume context at session start."
+    },
+    "siftmemory.injectOnUserPrompt": {
+      "type": "boolean",
+      "default": true,
+      "description": "Inject task-specific resume context when user submits a prompt."
+    },
+    "siftmemory.captureToolEvents": {
+      "type": "boolean",
+      "default": true,
+      "description": "Capture Claude tool use as SiftMemory events."
+    },
+    "siftmemory.captureFailures": {
+      "type": "boolean",
+      "default": true,
+      "description": "Capture failed tool use as events."
+    },
+    "siftmemory.extractBeforeCompact": {
+      "type": "boolean",
+      "default": true,
+      "description": "Request checkpoint extraction before compaction."
+    },
+    "siftmemory.recordOutcomesOnStop": {
+      "type": "boolean",
+      "default": true,
+      "description": "Record session outcomes when Claude stops."
+    },
+    "siftmemory.strictHookFailures": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, selected hooks may fail closed. MVP default is fail open."
     }
   }
 }
