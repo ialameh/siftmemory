@@ -1,0 +1,1 @@
+{"version":3,"file":"state-lock.d.ts","sourceRoot":"","sources":["../../scripts/runtime/state-lock.ts"],"names":[],"mappings":"AAOA,qBAAa,SAAS;IACpB,OAAO,CAAC,QAAQ,CAAuB;IAEvC,OAAO,IAAI,OAAO;IAkBlB,OAAO,IAAI,IAAI;IAWf,QAAQ,IAAI,OAAO;IAOnB,OAAO,CAAC,SAAS;IAcjB,QAAQ,CAAC,CAAC,EAAE,EAAE,EAAE,MAAM,CAAC,GAAG,CAAC;CAU5B;AAED,eAAO,MAAM,SAAS,WAAkB,CAAC"}

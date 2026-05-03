@@ -1,0 +1,1 @@
+{"version":3,"file":"daemon-start-lock.d.ts","sourceRoot":"","sources":["../../scripts/runtime/daemon-start-lock.ts"],"names":[],"mappings":"AAOA,qBAAa,eAAe;IAC1B,OAAO,CAAC,cAAc,CAAuB;IAE7C,OAAO,IAAI,OAAO;IAkBlB,OAAO,IAAI,IAAI;IAWf,QAAQ,IAAI,OAAO;IAOnB,OAAO,CAAC,SAAS;IAcjB,eAAe,IAAI,MAAM;CAc1B;AAID,eAAO,MAAM,eAAe,iBAAwB,CAAC"}
