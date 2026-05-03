@@ -1,6 +1,6 @@
 {
   "name": "siftmemory",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SiftMemory - resumable reasoning memory for Claude Code",
   "author": {
     "name": "Sam Alameh",

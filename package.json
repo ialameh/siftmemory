@@ -1,6 +1,6 @@
 {
   "name": "siftmemory",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "SiftMemory - resumable reasoning memory for Claude Code",
   "main": "dist/plugin.js",
