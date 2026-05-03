@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-node "${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/record-event.mjs" "$@"
+node "${CLAUDE_PLUGIN_ROOT}/dist/siftmemory-hook.js" "post-tool-use" "$@"

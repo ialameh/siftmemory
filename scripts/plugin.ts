@@ -16,14 +16,24 @@ export async function initializePlugin(): Promise<void> {
         lastHealthAttempt: null,
         lastHealthy: null,
         consecutiveFailures: 0,
+        restartAttemptsThisSession: 0,
+        permanentlyDownForSession: false,
       },
       session: {
         hooksEnabled: false,
         startTime: null,
         workspaceId: process.cwd(),
+        resumeInjections: [],
+        cwdToWorkspace: {},
       },
       config: {
         disabled: false,
+      },
+      notifications: {
+        coreMissingNotified: false,
+        daemonDownNotifiedAt: null,
+        midSessionFailureNotified: false,
+        permanentlyDownNotified: false,
       },
     });
   }

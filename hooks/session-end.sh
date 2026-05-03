@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-node "${CLAUDE_PLUGIN_ROOT}/hooks/session-end/handler.mjs" "$@"
+node "${CLAUDE_PLUGIN_ROOT}/dist/siftmemory-hook.js" "session-end" "$@"

@@ -1,4 +1,4 @@
-import { RuntimeReadinessResult, ReadinessReason, SiftMemoryRuntimeState } from '../types.js';
+import { RuntimeReadinessResult, ReadinessReason, SiftMemoryRuntimeState, ResumeInjectionRecord } from '../types.js';
 import { configService } from './config.js';
 import { binaryResolver } from './binary-resolver.js';
 import { daemonHealthClient } from './daemon-health.js';
@@ -8,6 +8,8 @@ import { notificationService } from './notification.js';
 import { pluginStateStore } from './plugin-state.js';
 
 const UNHEALTHY_THRESHOLD_MS = 60000;
+const RESTART_BACKOFF_MS = [1000, 3000, 10000]; // 1s, 3s, 10s
+const MAX_RESTART_ATTEMPTS = 3;
 
 export class RuntimeReadinessService {
   async ensureReady(reason: ReadinessReason): Promise<RuntimeReadinessResult> {
@@ -169,21 +171,31 @@ export class RuntimeReadinessService {
     return configService.config.autoStartDaemon;
   }
 
-  private async updateState(newState: SiftMemoryRuntimeState, existingState?: { runtime: { state: SiftMemoryRuntimeState; lastHealthAttempt: number | null; lastHealthy: number | null; consecutiveFailures: number }; session: { hooksEnabled: boolean; startTime: number | null; workspaceId: string }; config: { disabled: boolean } } | null): Promise<void> {
+  private async updateState(newState: SiftMemoryRuntimeState, existingState?: { runtime: { state: SiftMemoryRuntimeState; lastHealthAttempt: number | null; lastHealthy: number | null; consecutiveFailures: number; restartAttemptsThisSession: number; permanentlyDownForSession: boolean }; session: { hooksEnabled: boolean; startTime: number | null; workspaceId: string; resumeInjections: ResumeInjectionRecord[]; cwdToWorkspace: Record<string, string> }; config: { disabled: boolean }; notifications: { coreMissingNotified: boolean; daemonDownNotifiedAt: number | null; midSessionFailureNotified: boolean; permanentlyDownNotified: boolean } } | null): Promise<void> {
     const state = existingState || {
       runtime: {
         state: newState,
         lastHealthAttempt: null,
         lastHealthy: null,
         consecutiveFailures: 0,
+        restartAttemptsThisSession: 0,
+        permanentlyDownForSession: false,
       },
       session: {
         hooksEnabled: false,
         startTime: null,
         workspaceId: process.cwd(),
+        resumeInjections: [] as ResumeInjectionRecord[],
+        cwdToWorkspace: {},
       },
       config: {
         disabled: false,
+      },
+      notifications: {
+        coreMissingNotified: false,
+        daemonDownNotifiedAt: null,
+        midSessionFailureNotified: false,
+        permanentlyDownNotified: false,
       },
     };
     state.runtime.state = newState;

@@ -15,6 +15,10 @@ export class DaemonSupervisor extends EventEmitter {
       this.runningProcess = spawn(daemonPath, [], {
         detached: true,
         stdio: 'ignore',
+        env: {
+          ...process.env,
+          SIFTMEMORY_STARTED_BY: 'claude-plugin'
+        }
       });
 
       this.currentPid = this.runningProcess.pid || null;

@@ -1,14 +1,22 @@
-import { writeFileSync, existsSync, unlinkSync } from 'fs';
+import { writeFileSync, existsSync, unlinkSync, readFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
-import { tmpdir } from 'os';
+import { homedir } from 'os';
 
 const LOCK_TTL_MS = 10000;
-const LOCK_FILE = resolve(tmpdir(), 'siftmemory-daemon-start.lock');
+const SIFT_MEMORY_DIR = resolve(homedir(), '.siftmemory');
+const LOCK_FILE = resolve(SIFT_MEMORY_DIR, 'claude-plugin-daemon-start.lock');
+
+function ensureSiftMemoryDir(): void {
+  if (!existsSync(SIFT_MEMORY_DIR)) {
+    mkdirSync(SIFT_MEMORY_DIR, { recursive: true });
+  }
+}
 
 export class DaemonStartLock {
   private lockAcquiredAt: number | null = null;
 
   acquire(): boolean {
+    ensureSiftMemoryDir();
     if (this.isLocked()) {
       if (this.isExpired()) {
         this.release();
@@ -73,7 +81,5 @@ export class DaemonStartLock {
     }
   }
 }
-
-import { readFileSync } from 'fs';
 
 export const daemonStartLock = new DaemonStartLock();

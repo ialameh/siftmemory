@@ -18,6 +18,7 @@ export class DaemonHealthClient {
     }
 
     try {
+      // Health endpoint per spec: GET /v1/health
       const response = await axios.get(`${url}/v1/health`, {
         timeout: 2000,
         validateStatus: () => true,
