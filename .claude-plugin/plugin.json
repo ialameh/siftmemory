@@ -22,52 +22,5 @@
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"]
     }
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Read|Write|Edit|Bash|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use/record-event.mjs",
-            "timeout": 2
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact/inject-resume.mjs",
-            "timeout": 3
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start/spawn-daemon.mjs",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop/record-outcome.mjs",
-            "timeout": 2
-          }
-        ]
-      }
-    ]
   }
 }

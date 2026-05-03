@@ -12,10 +12,13 @@
     "node": ">=18.0.0"
   },
   "scripts": {
+    "sync-version": "node scripts/sync-version.mjs",
+    "prebuild": "node scripts/sync-version.mjs",
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "npm run build"
   },
   "files": [
     "dist",
