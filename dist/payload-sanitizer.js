@@ -40,8 +40,10 @@ export function classifyToolEvent(event) {
     const toolName = event.tool_name || '';
     if (toolName === 'Read')
         return 'FileRead';
-    if (toolName === 'Write' || toolName === 'NotebookEdit')
-        return 'FileWrite';
+    if (toolName === 'Write')
+        return 'FileCreate';
+    if (toolName === 'NotebookEdit')
+        return 'FileCreate';
     if (toolName === 'Edit')
         return 'FileEdit';
     // Bash classifier
@@ -58,8 +60,8 @@ export function classifyToolEvent(event) {
     if (toolName === 'Bash')
         return 'CommandRun';
     if (toolName === 'Grep' || toolName === 'Glob')
-        return 'Search';
-    return 'Unknown';
+        return 'ManualNote';
+    return 'CommandRun';
 }
 export function sanitizeToolPayload(event, eventType) {
     const toolName = event.tool_name || '';
@@ -91,7 +93,7 @@ export function sanitizeToolPayload(event, eventType) {
         const content = String(input.content || '');
         return {
             ...sanitized,
-            event_type: 'FileWrite',
+            event_type: 'FileCreate',
             file_path: input.file_path,
             content_hash: hashString(content),
             byte_length: Buffer.byteLength(content, 'utf-8'),
@@ -153,7 +155,8 @@ export function sanitizeToolPayload(event, eventType) {
             .filter(Boolean);
         return {
             ...sanitized,
-            event_type: 'Search',
+            event_type: 'ManualNote',
+            tool: toolName,
             pattern_hash: hashString(pattern),
             match_count: matches.length,
             matched_paths: matchedPaths,

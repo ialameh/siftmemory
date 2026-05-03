@@ -100,6 +100,30 @@ class DaemonClientImpl {
             body: JSON.stringify(params),
         });
     }
+    async collectiveStatus(workspaceId) {
+        return this.fetch(`/v1/collective/status?workspace_id=${encodeURIComponent(workspaceId)}`, { method: 'GET' });
+    }
+    async collectiveConflicts(workspaceId) {
+        return this.fetch(`/v1/collective/conflicts?workspace_id=${encodeURIComponent(workspaceId)}`, { method: 'GET' });
+    }
+    async collectivePromote(workspaceId, checkpointId) {
+        return this.fetch('/v1/collective/promote', {
+            method: 'POST',
+            body: JSON.stringify({ workspace_id: workspaceId, checkpoint_id: checkpointId }),
+        });
+    }
+    async collectiveValidate(workspaceId, checkpointId) {
+        return this.fetch('/v1/collective/validate', {
+            method: 'POST',
+            body: JSON.stringify({ workspace_id: workspaceId, checkpoint_id: checkpointId }),
+        });
+    }
+    async collectiveImport(workspaceId) {
+        return this.fetch('/v1/collective/import', {
+            method: 'POST',
+            body: JSON.stringify({ workspace_id: workspaceId }),
+        });
+    }
 }
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));

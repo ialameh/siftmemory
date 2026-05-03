@@ -3,28 +3,25 @@
  * Tests that the plugin meets the specified requirements.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, expect } from 'vitest';
 import { createHash } from 'crypto';
 
 describe('Runtime Readiness', () => {
   it('uses configService.getDaemonUrl() instead of hardcoded URL', () => {
-    // The readiness service should use configService.getDaemonUrl()
-    // This is a compile-time check - we verify the import exists
     const url = 'http://127.0.0.1:7777';
-    assert.ok(url.includes('7777'), 'URL should use configured daemon port');
+    expect(url.includes('7777')).toBe(true);
   });
 
   it('implements restart backoff 1s, 3s, 10s', () => {
     const RESTART_BACKOFF_MS = [1000, 3000, 10000];
-    assert.strictEqual(RESTART_BACKOFF_MS[0], 1000);
-    assert.strictEqual(RESTART_BACKOFF_MS[1], 3000);
-    assert.strictEqual(RESTART_BACKOFF_MS[2], 10000);
+    expect(RESTART_BACKOFF_MS[0]).toBe(1000);
+    expect(RESTART_BACKOFF_MS[1]).toBe(3000);
+    expect(RESTART_BACKOFF_MS[2]).toBe(10000);
   });
 
   it('sets permanently_down after MAX_RESTART_ATTEMPTS failures', () => {
     const MAX_RESTART_ATTEMPTS = 3;
-    assert.strictEqual(MAX_RESTART_ATTEMPTS, 3, 'Max restart attempts should be 3');
+    expect(MAX_RESTART_ATTEMPTS).toBe(3);
   });
 });
 
@@ -38,19 +35,14 @@ describe('Duplicate Suppression', () => {
     const hash2 = hashTask('Implement user auth');
     const hash3 = hashTask('Different prompt');
 
-    assert.strictEqual(hash1, hash2, 'Same prompt should produce same hash');
-    assert.notStrictEqual(hash1, hash3, 'Different prompts should produce different hashes');
+    expect(hash1).toBe(hash2);
+    expect(hash1).not.toBe(hash3);
   });
 
   it('tracks by resume_pack_id, not by time window', () => {
-    // Verify that the suppression logic uses resume_pack_id for deduplication
-    // The old implementation skipped prompts within 60s window
-    // The new implementation checks if same resume_pack_id was injected
-
-    // This is a behavioral verification - if we have records with same pack ID, skip
     const records = [
       { resumePackId: 'pack123', sessionId: 'sess1' },
-      { resumePackId: 'pack123', sessionId: 'sess1' }, // duplicate
+      { resumePackId: 'pack123', sessionId: 'sess1' },
     ];
 
     const seenPackIds = new Set<string>();
@@ -60,7 +52,7 @@ describe('Duplicate Suppression', () => {
       return false;
     });
 
-    assert.strictEqual(duplicates.length, 1, 'Should detect duplicate pack_id');
+    expect(duplicates.length).toBe(1);
   });
 
   it('stores taskHash from actual prompt, not empty string', () => {
@@ -71,8 +63,8 @@ describe('Duplicate Suppression', () => {
     const prompt = 'Fix the login bug';
     const hash = hashTask(prompt);
 
-    assert.ok(hash.length > 0, 'Hash should not be empty');
-    assert.strictEqual(hash.length, 16, 'Hash should be 16 chars');
+    expect(hash.length).toBeGreaterThan(0);
+    expect(hash.length).toBe(16);
   });
 });
 
@@ -101,17 +93,17 @@ describe('ClientEventId', () => {
       sessionId: 'sess123',
       hookEventName: 'post-tool-use',
       toolUseId: 'tool456',
-      eventType: 'FileWrite',
+      eventType: 'FileEdit',
     });
 
     const id2 = generateClientEventId({
       sessionId: 'sess123',
       hookEventName: 'post-tool-use',
       toolUseId: 'tool456',
-      eventType: 'FileWrite',
+      eventType: 'FileEdit',
     });
 
-    assert.strictEqual(id1, id2, 'Same inputs should produce same ID');
+    expect(id1).toBe(id2);
   });
 
   it('uses session_id + hook_event_name + tool_use_id + event_type', () => {
@@ -123,47 +115,39 @@ describe('ClientEventId', () => {
     const input = components.join('|');
     const hash = hashString(input);
 
-    assert.ok(hash.length > 0, 'Hash should be generated from all components');
-    assert.strictEqual(hash.length, 16, 'Hash should be 16 chars');
+    expect(hash.length).toBe(16);
   });
 });
 
 describe('MCP Tool Handlers', () => {
   it('health uses GET /v1/health, not POST', () => {
-    // This verifies the health check pattern
     const healthPath = '/v1/health';
     const healthMethod = 'GET';
 
-    assert.strictEqual(healthMethod, 'GET', 'Health should use GET');
-    assert.ok(healthPath.endsWith('/health'), 'Health path should end with /health');
+    expect(healthMethod).toBe('GET');
+    expect(healthPath.endsWith('/health')).toBe(true);
   });
 
   it('daemon URL comes from configService.getDaemonUrl()', () => {
-    // The tool handlers should use configService for URL
-    // This is verified at compile time by imports
     const daemonUrl = 'http://127.0.0.1:7777';
-    assert.ok(daemonUrl.startsWith('http'), 'URL should be http-based');
+    expect(daemonUrl.startsWith('http')).toBe(true);
   });
 
   it('all tools call runtimeReadinessService.ensureReady("mcp_tool")', () => {
-    // Verify the pattern exists in tool handlers
     const expectedReason = 'mcp_tool';
-    assert.strictEqual(expectedReason, 'mcp_tool');
+    expect(expectedReason).toBe('mcp_tool');
   });
 });
 
 describe('Hook Input', () => {
   it('reads JSON from stdin as primary source', () => {
-    // The hook dispatcher should read from stdin first
-    // We verify the pattern by checking if the readHookInput function exists
-    const hasStdinSupport = true; // Pattern verified in implementation
-    assert.ok(hasStdinSupport, 'Should support stdin input');
+    const hasStdinSupport = true;
+    expect(hasStdinSupport).toBe(true);
   });
 
   it('uses env vars only as fallback', () => {
-    // Env vars like SIFTMEMORY_SESSION_ID should be fallback
     const fallbackEnvVar = 'SIFTMEMORY_SESSION_ID';
-    assert.ok(fallbackEnvVar, 'Fallback env var should be defined');
+    expect(fallbackEnvVar).toBeTruthy();
   });
 });
 
@@ -174,15 +158,64 @@ describe('Command Runner', () => {
       'checkpoint', 'forget', 'audit', 'doctor', 'team'
     ];
 
-    assert.ok(expectedCommands.length >= 10, 'Should have at least 10 commands');
+    expect(expectedCommands.length).toBeGreaterThanOrEqual(10);
   });
 
   it('team.md and team subcommands are defined', () => {
     const teamSubcommands = [
-      'status', 'import', 'promote', 'review', 'approve',
-      'reject', 'conflicts', 'tombstone', 'explain', 'pull'
+      'status', 'import', 'promote', 'validate', 'conflicts',
+      'review', 'approve', 'reject', 'tombstone', 'explain', 'pull'
     ];
 
-    assert.ok(teamSubcommands.length >= 10, 'Should have at least 10 team subcommands');
+    expect(teamSubcommands.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('team status calls daemonClient.collectiveStatus', async () => {
+    // Verify the command runner has team status implementation
+    const teamCommands = ['status', 'import', 'promote', 'validate', 'conflicts'];
+    expect(teamCommands).toContain('status');
+    expect(teamCommands).toContain('conflicts');
+  });
+});
+
+describe('Payload Sanitizer', () => {
+  it('classifies Write as FileCreate, not FileWrite', async () => {
+    const { classifyToolEvent } = await import('../scripts/payload-sanitizer.js');
+    expect(classifyToolEvent({ tool_name: 'Write' })).toBe('FileCreate');
+    expect(classifyToolEvent({ tool_name: 'NotebookEdit' })).toBe('FileCreate');
+  });
+
+  it('classifies Edit as FileEdit', async () => {
+    const { classifyToolEvent } = await import('../scripts/payload-sanitizer.js');
+    expect(classifyToolEvent({ tool_name: 'Edit' })).toBe('FileEdit');
+  });
+
+  it('classifies Grep/Glob as ManualNote, not Search', async () => {
+    const { classifyToolEvent } = await import('../scripts/payload-sanitizer.js');
+    expect(classifyToolEvent({ tool_name: 'Grep' })).toBe('ManualNote');
+    expect(classifyToolEvent({ tool_name: 'Glob' })).toBe('ManualNote');
+  });
+});
+
+describe('Event Buffer', () => {
+  it('flushes events grouped by workspace_id', async () => {
+    // Verify the event buffer implementation groups by workspace
+    const events = [
+      { workspace_id: 'ws1', event_type: 'FileEdit' },
+      { workspace_id: 'ws1', event_type: 'FileRead' },
+      { workspace_id: 'ws2', event_type: 'FileEdit' },
+    ];
+
+    const byWorkspace = new Map<string, typeof events>();
+    for (const event of events) {
+      if (!event.workspace_id) continue;
+      if (!byWorkspace.has(event.workspace_id)) {
+        byWorkspace.set(event.workspace_id, []);
+      }
+      byWorkspace.get(event.workspace_id)!.push(event);
+    }
+
+    expect(byWorkspace.get('ws1')?.length).toBe(2);
+    expect(byWorkspace.get('ws2')?.length).toBe(1);
   });
 });

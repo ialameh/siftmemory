@@ -11,6 +11,11 @@ export interface DaemonClient {
     extractCheckpoint(params: Record<string, unknown>): Promise<ApiResponse<ExtractCheckpointResponse>>;
     buildResume(params: Record<string, unknown>): Promise<ApiResponse<BuildResumeResponse>>;
     recordOutcome(params: Record<string, unknown>): Promise<ApiResponse<RecordOutcomeResponse>>;
+    collectiveStatus(workspaceId: string): Promise<ApiResponse<unknown>>;
+    collectiveConflicts(workspaceId: string): Promise<ApiResponse<unknown>>;
+    collectivePromote(workspaceId: string, checkpointId: string): Promise<ApiResponse<unknown>>;
+    collectiveValidate(workspaceId: string, checkpointId?: string): Promise<ApiResponse<unknown>>;
+    collectiveImport(workspaceId: string): Promise<ApiResponse<unknown>>;
 }
 declare class DaemonClientImpl implements DaemonClient {
     private baseUrl;
@@ -23,6 +28,11 @@ declare class DaemonClientImpl implements DaemonClient {
     extractCheckpoint(params: Record<string, unknown>): Promise<ApiResponse<ExtractCheckpointResponse>>;
     buildResume(params: Record<string, unknown>): Promise<ApiResponse<BuildResumeResponse>>;
     recordOutcome(params: Record<string, unknown>): Promise<ApiResponse<RecordOutcomeResponse>>;
+    collectiveStatus(workspaceId: string): Promise<ApiResponse<unknown>>;
+    collectiveConflicts(workspaceId: string): Promise<ApiResponse<unknown>>;
+    collectivePromote(workspaceId: string, checkpointId: string): Promise<ApiResponse<unknown>>;
+    collectiveValidate(workspaceId: string, checkpointId?: string): Promise<ApiResponse<unknown>>;
+    collectiveImport(workspaceId: string): Promise<ApiResponse<unknown>>;
 }
 export declare function apiFetch<T>(baseUrl: string, path: string, options?: RequestInit & {
     timeoutMs?: number;

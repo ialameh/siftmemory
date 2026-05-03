@@ -29,6 +29,11 @@ export interface DaemonClient {
   extractCheckpoint(params: Record<string, unknown>): Promise<ApiResponse<ExtractCheckpointResponse>>;
   buildResume(params: Record<string, unknown>): Promise<ApiResponse<BuildResumeResponse>>;
   recordOutcome(params: Record<string, unknown>): Promise<ApiResponse<RecordOutcomeResponse>>;
+  collectiveStatus(workspaceId: string): Promise<ApiResponse<unknown>>;
+  collectiveConflicts(workspaceId: string): Promise<ApiResponse<unknown>>;
+  collectivePromote(workspaceId: string, checkpointId: string): Promise<ApiResponse<unknown>>;
+  collectiveValidate(workspaceId: string, checkpointId?: string): Promise<ApiResponse<unknown>>;
+  collectiveImport(workspaceId: string): Promise<ApiResponse<unknown>>;
 }
 
 class DaemonClientImpl implements DaemonClient {
@@ -150,6 +155,35 @@ class DaemonClientImpl implements DaemonClient {
     return this.fetch<RecordOutcomeResponse>('/v1/outcomes', {
       method: 'POST',
       body: JSON.stringify(params),
+    });
+  }
+
+  async collectiveStatus(workspaceId: string): Promise<ApiResponse<unknown>> {
+    return this.fetch<unknown>(`/v1/collective/status?workspace_id=${encodeURIComponent(workspaceId)}`, { method: 'GET' });
+  }
+
+  async collectiveConflicts(workspaceId: string): Promise<ApiResponse<unknown>> {
+    return this.fetch<unknown>(`/v1/collective/conflicts?workspace_id=${encodeURIComponent(workspaceId)}`, { method: 'GET' });
+  }
+
+  async collectivePromote(workspaceId: string, checkpointId: string): Promise<ApiResponse<unknown>> {
+    return this.fetch<unknown>('/v1/collective/promote', {
+      method: 'POST',
+      body: JSON.stringify({ workspace_id: workspaceId, checkpoint_id: checkpointId }),
+    });
+  }
+
+  async collectiveValidate(workspaceId: string, checkpointId?: string): Promise<ApiResponse<unknown>> {
+    return this.fetch<unknown>('/v1/collective/validate', {
+      method: 'POST',
+      body: JSON.stringify({ workspace_id: workspaceId, checkpoint_id: checkpointId }),
+    });
+  }
+
+  async collectiveImport(workspaceId: string): Promise<ApiResponse<unknown>> {
+    return this.fetch<unknown>('/v1/collective/import', {
+      method: 'POST',
+      body: JSON.stringify({ workspace_id: workspaceId }),
     });
   }
 }

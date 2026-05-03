@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import { runtimeReadinessService } from './runtime/readiness.js';
 import { configService } from './runtime/config.js';
 import { pluginStateStore } from './runtime/plugin-state.js';
-import { getDaemonHealth, buildResumePack } from './daemon-client.js';
+import { getDaemonHealth, buildResumePack, ensureWorkspace, daemonClient, isApiSuccess, getApiError } from './daemon-http.js';
 import { binaryResolver } from './runtime/binary-resolver.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const COMMANDS_DIR = join(__dirname, '..', 'commands');
@@ -123,7 +123,7 @@ async function runResume(args) {
         return { success: false, output: '', error: 'SiftMemory is not ready.' };
     }
     const task = args.join(' ').trim() || 'Resume reasoning';
-    const workspace = await import('./daemon-client.js').then(m => m.ensureWorkspace(process.cwd()));
+    const workspace = await ensureWorkspace(process.cwd());
     if (!workspace) {
         return { success: false, output: '', error: 'No workspace found.' };
     }
@@ -137,7 +137,7 @@ async function runResume(args) {
         });
         return {
             success: true,
-            output: result.context || 'No resume context available.',
+            output: result.rendered_markdown || 'No resume context available.',
         };
     }
     catch (err) {
@@ -185,17 +185,112 @@ async function runDoctor() {
 }
 async function runTeam(args) {
     const subcommand = args[0] || 'status';
-    // Team subcommands
-    const teamCommands = ['status', 'import', 'promote', 'review', 'approve', 'reject', 'conflicts', 'tombstone', 'explain', 'pull'];
-    if (!teamCommands.includes(subcommand)) {
-        return {
-            success: false,
-            output: '',
-            error: `Unknown team subcommand: ${subcommand}\n\nAvailable: ${teamCommands.join(', ')}`,
-        };
+    const workspace = await ensureWorkspace(process.cwd());
+    if (!workspace) {
+        return { success: false, output: '', error: 'No workspace found.' };
     }
-    // Delegate to team handler (implemented separately)
-    return { success: true, output: `Team ${subcommand} - not yet implemented.` };
+    const workspaceId = workspace.workspace_id;
+    switch (subcommand) {
+        case 'status': {
+            const response = await daemonClient.collectiveStatus(workspaceId);
+            if (isApiSuccess(response) && response.data) {
+                const data = response.data;
+                let output = '# Collective Memory Status\n\n';
+                output += `- **Workspace**: ${workspaceId}\n`;
+                output += `- **Path**: ${data.repo_collective_path || 'unknown'}\n`;
+                output += `- **Manifest**: ${data.manifest_exists ? '✅ exists' : '❌ missing'}\n\n`;
+                const counts = data.record_counts || {};
+                output += '## Record Counts\n';
+                for (const [key, val] of Object.entries(counts)) {
+                    output += `- **${key}**: ${val}\n`;
+                }
+                output += `\n**Pending Reviews**: ${data.pending_reviews || 0}\n`;
+                output += `**Unresolved Conflicts**: ${data.unresolved_conflicts || 0}\n`;
+                return { success: true, output };
+            }
+            return { success: false, output: '', error: `Daemon returned: ${response.error ? getApiError(response) : 'unknown'}` };
+        }
+        case 'conflicts': {
+            const response = await daemonClient.collectiveConflicts(workspaceId);
+            if (isApiSuccess(response) && response.data) {
+                const data = response.data;
+                let output = '# Collective Conflicts\n\n';
+                output += `**Unresolved**: ${data.unresolved_count}\n\n`;
+                if (data.conflicts.length === 0) {
+                    output += 'No conflicts found.\n';
+                }
+                else {
+                    for (const conflict of data.conflicts) {
+                        output += `- ${JSON.stringify(conflict)}\n`;
+                    }
+                }
+                return { success: true, output };
+            }
+            return { success: false, output: '', error: `Daemon returned: ${response.error ? getApiError(response) : 'unknown'}` };
+        }
+        case 'import': {
+            const response = await daemonClient.collectiveImport(workspaceId);
+            if (isApiSuccess(response) && response.data) {
+                const data = response.data;
+                let output = `# Collective Import\n\n`;
+                output += `**Imported**: ${data.imported_count} records\n`;
+                if (data.warnings.length > 0) {
+                    output += `\n**Warnings**:\n`;
+                    for (const w of data.warnings) {
+                        output += `- ${w}\n`;
+                    }
+                }
+                return { success: true, output };
+            }
+            return { success: false, output: '', error: `Daemon returned: ${response.error ? getApiError(response) : 'unknown'}` };
+        }
+        case 'promote': {
+            const checkpointId = args[1];
+            if (!checkpointId) {
+                return { success: false, output: '', error: 'Usage: /siftmemory team promote <checkpoint_id>' };
+            }
+            const response = await daemonClient.collectivePromote(workspaceId, checkpointId);
+            if (isApiSuccess(response) && response.data) {
+                const data = response.data;
+                return { success: true, output: `✅ Promoted checkpoint ${data.promoted_checkpoint_id} (status: ${data.review_status})` };
+            }
+            return { success: false, output: '', error: `Daemon returned: ${response.error ? getApiError(response) : 'unknown'}` };
+        }
+        case 'validate': {
+            const checkpointId = args[1] || undefined;
+            const response = await daemonClient.collectiveValidate(workspaceId, checkpointId);
+            if (isApiSuccess(response) && response.data) {
+                const data = response.data;
+                let output = `# Collective Validation\n\n`;
+                output += `**Validated**: ${data.validated_claims}\n`;
+                output += `**Invalidated**: ${data.invalidated_claims}\n`;
+                output += `**Disputed**: ${data.disputed_claims}\n`;
+                if (data.warnings.length > 0) {
+                    output += `\n**Warnings**:\n`;
+                    for (const w of data.warnings) {
+                        output += `- ${w}\n`;
+                    }
+                }
+                return { success: true, output };
+            }
+            return { success: false, output: '', error: `Daemon returned: ${response.error ? getApiError(response) : 'unknown'}` };
+        }
+        case 'review':
+        case 'approve':
+        case 'reject':
+        case 'tombstone':
+        case 'explain':
+        case 'pull': {
+            return { success: true, output: `Team ${subcommand} - not yet implemented. This SiftMemory daemon does not implement this collective operation yet.` };
+        }
+        default: {
+            return {
+                success: false,
+                output: '',
+                error: `Unknown team subcommand: ${subcommand}\n\nAvailable: status, import, promote, validate, conflicts`,
+            };
+        }
+    }
 }
 export async function listCommands() {
     try {
@@ -207,5 +302,22 @@ export async function listCommands() {
     catch {
         return ['check', 'status', 'start', 'stop', 'resume', 'checkpoint', 'forget', 'audit', 'doctor', 'team'];
     }
+}
+// CLI entrypoint
+if (import.meta.url === `file://${process.argv[1]}`) {
+    const command = process.argv[2];
+    const args = process.argv.slice(3);
+    runCommand(command, args)
+        .then((result) => {
+        if (result.output)
+            console.log(result.output);
+        if (result.error)
+            console.error(result.error);
+        process.exit(result.success ? 0 : 1);
+    })
+        .catch((err) => {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+    });
 }
 //# sourceMappingURL=command-runner.js.map

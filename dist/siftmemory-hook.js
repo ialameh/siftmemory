@@ -19,7 +19,7 @@ import { runtimeReadinessService } from './runtime/readiness.js';
 import { configService } from './runtime/config.js';
 import { daemonHealthClient } from './runtime/daemon-health.js';
 import { pluginStateStore } from './runtime/plugin-state.js';
-import { ensureWorkspace, recordOutcome as recordSessionOutcome, buildResumePack } from './daemon-http.js';
+import { ensureWorkspace, recordOutcome as recordSessionOutcome, buildResumePack, daemonClient } from './daemon-http.js';
 import { classifyToolEvent, sanitizeToolPayload } from './payload-sanitizer.js';
 import { checkDuplicateResume, recordResumeInjection, hashTask, isPromptTrivial } from './duplicate-suppression.js';
 import { renderResumePack } from './render-injection.js';
@@ -197,7 +197,8 @@ async function runHook(hookName, args) {
             process.exit(0);
         }
         try {
-            const eventType = 'tool_failure';
+            // Map tool_failure to ManualNote per contract
+            const eventType = 'ManualNote';
             const sanitized = sanitizeToolPayload({ tool_name: input.tool_name, tool_input: input.tool_input, hook_event_name: hookName }, eventType);
             sanitized.workspace_id = workspace.workspace_id;
             sanitized.session_id = sessionId;
@@ -229,34 +230,28 @@ async function runHook(hookName, args) {
         if (!workspace) {
             process.exit(0);
         }
-        const daemonUrl = configService.getDaemonUrl();
         try {
             // Try checkpoint extraction first
-            await fetch(`${daemonUrl}/v1/checkpoints/extract`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    workspace_id: workspace.workspace_id,
-                    session_id: sessionId,
-                }),
+            await daemonClient.extractCheckpoint({
+                workspace_id: workspace.workspace_id,
+                session_id: sessionId,
             }).catch(() => { });
-            // Then build resume pack
-            const response = await fetch(`${daemonUrl}/v1/resume/build`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    workspace_id: workspace.workspace_id,
-                    session_id: sessionId,
-                    mode: 'compact',
-                    token_budget: 2000,
-                    include_collective: true,
-                    include_private: false,
-                    collective_policy: 'validated_only',
-                }),
+            // Then build resume pack using canonical client
+            const response = await daemonClient.buildResume({
+                workspace_id: workspace.workspace_id,
+                session_id: sessionId,
+                task: 'Pre-compaction reasoning preservation',
+                mode: 'minimal',
+                token_budget: 2000,
+                include_collective: true,
+                include_private: false,
+                collective_policy: 'validated_only',
             });
-            if (response.ok) {
-                const data = await response.json();
-                const rendered = renderResumePack(data);
+            if (response.ok && response.data) {
+                const rendered = renderResumePack({
+                    resume_pack_id: response.data.resume_pack_id,
+                    context: response.data.rendered_markdown,
+                });
                 process.stdout.write(rendered);
             }
         }
